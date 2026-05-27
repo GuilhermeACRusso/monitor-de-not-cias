@@ -1,5 +1,5 @@
 """
-Monitor de Notícias v1.0 — Análise de cobertura jornalística brasileira
+Monitor de Notícias v1.0 - Análise de cobertura jornalística brasileira
 =======================================================================
 Fontes: G1, Folha, O Globo, Estadão, Metrópoles, Intercept, Agência Mural,
         A Pública, Fiocruz, Jornal USP, Agência Galão
@@ -18,7 +18,7 @@ Schedule: diário 7h BRT (10:00 UTC)
 
 import requests, datetime, os, sys, re, json, unicodedata, time
 import xml.etree.ElementTree as ET
-from collections import defaultdict, Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID        = os.getenv("CHAT_ID")
@@ -64,14 +64,16 @@ SOURCES = [
      "home": "https://apublica.org/",
      "fmt":  "rss"},
     {"name": "Ag. Mural",    "emoji": "🟡", "tier": "investigativa",
-     "rss":  "https://agenciamural.org.br/feed/",
-     "rss2": "https://agenciamural.org.br/noticias/",
+     "rss":  "https://agenciamural.org.br/wp-json/wp/v2/posts?per_page=25&orderby=date&order=desc&_fields=title,link,excerpt,date",
+     "rss2": "https://agenciamural.org.br/feed/",
+     "rss3": "https://agenciamural.org.br/noticias/",
      "home": "https://agenciamural.org.br/noticias/",
-     "fmt":  "rss"},
+     "fmt":  "wp_api"},
     # Científica / acadêmica
     {"name": "Fiocruz",      "emoji": "🏥", "tier": "cientifica",
      "rss":  "https://agencia.fiocruz.br/feed/",
-     "rss2": "https://agencia.fiocruz.br/noticias",
+     "rss2": "https://agencia.fiocruz.br/wp-json/wp/v2/posts?per_page=25&orderby=date&order=desc&_fields=title,link,excerpt,date",
+     "rss3": "https://agencia.fiocruz.br/noticias",
      "home": "https://agencia.fiocruz.br/",
      "fmt":  "rss"},
     {"name": "Jornal USP",   "emoji": "🎓", "tier": "cientifica",
@@ -79,10 +81,11 @@ SOURCES = [
      "home": "https://jornal.usp.br/",
      "fmt":  "rss"},
     {"name": "Ag. Galão",    "emoji": "🎭", "tier": "cultural",
-     "rss":  "https://agenciagalo.com/feed/",
-     "rss2": "https://agenciagalo.com/",
+     "rss":  "https://agenciagalo.com/wp-json/wp/v2/posts?per_page=25&orderby=date&order=desc&_fields=title,link,excerpt,date",
+     "rss2": "https://agenciagalo.com/feed/",
+     "rss3": "https://agenciagalo.com/",
      "home": "https://agenciagalo.com/",
-     "fmt":  "rss"},
+     "fmt":  "wp_api"},
 ]
 
 
@@ -97,6 +100,130 @@ STOPWORDS = {
     "dois","três","mil","neste","nesta","nessa","nesse","esse","esta","isto",
     "isso","este","aquele","aquela","diante","frente","agora","hoje","ontem",
 }
+# ── TOPIC RELEVANCE FILTER ────────────────────────────────────────
+# KEEP: politics, economy, SP city, state/federal government, science, environment, health
+_KEEP_TOKENS = {
+    # Política
+    "politica","eleicao","candidato","partido","voto","congresso","senado","camara",
+    "presidente","governador","prefeito","ministro","ministerio","governo","reforma",
+    "lei","decreto","votacao","aprovado","aprovada","deputado","vereador","senador",
+    # Economia
+    "economia","economico","mercado","dolar","real","inflacao","pib","desemprego",
+    "emprego","empresa","industria","exportacao","banco","bolsa","fiscal","orcamento",
+    "investimento","juros","selic","tributario","imposto","arrecadacao","privatizacao",
+    "concessao","licitacao","contrato","corrupcao","desvio","fraude",
+    # São Paulo (cidade e estado)
+    "paulo","paulista","paulistano","tarcisio","alesp","estadual","capital","subprefeitura",
+    # Governo federal
+    "lula","planalto","stf","supremo","tcm","tcu","tce","ministerio","federal",
+    # Ciência e pesquisa
+    "pesquisa","ciencia","cientifico","estudo","universidade","descoberta","tecnologia",
+    "inovacao","academico","academica","publicado","revista","revista","cientifico",
+    # Saúde
+    "saude","doenca","virus","vacina","hospital","sus","medico","pandemia","epidemia",
+    "dengue","cancer","tratamento","medicamento","anvisa","fiocruz","clinica","cirurgia",
+    # Meio ambiente
+    "ambiental","desmatamento","clima","climatica","aquecimento","biodiversidade",
+    "sustentabilidade","floresta","queimada","carbono","emissao","enchente","seca",
+    "poluicao","reciclagem","energia","renovavel","solar","eolica","hidroeletrica",
+    # Segurança pública
+    "policia","crime","violencia","morte","assassinato","homicidio","operacao",
+    "prisao","condenado","investigacao","corrupcao","trafico","arma",
+}
+
+# OUT: celebrities, gossip, food, entertainment, lifestyle
+_BLOCK_TOKENS = {
+    "celebridade","famoso","famosa","ator","atriz","cantor","cantora","artista",
+    "fofoca","novela","reality","bbb","bigbrother","namorado","namorada","casamento",
+    "separacao","divorcio","gravidez","bebe","filho","filha",  # when about celebs
+    "receita","culinaria","gastronomia","chef","restaurante","prato","ingrediente",
+    "moda","roupa","look","estilo","beleza","maquiagem","skincare","cabelo",
+    "horoscopo","signo","esporte","futebol","gol","campeonato","copa",  # unless policy
+    "funk","pagode","sertanejo","show","concert","festival","musica",   # unless policy
+    "serie","filme","cinema","streaming","netflix","disney","amazon",
+    "viagem","turismo","praia","hotel","hospedagem","passeio",
+}
+
+# Topic-specific block phrases (must match as substring in normalized title)
+_BLOCK_PHRASES = [
+    "receita de", "como fazer", "dicas para", "o melhor de",
+    "o que comer", "onde comer", "melhor restaurante",
+    "look do dia", "tendencia de moda", "cabelo",
+    "top 10", "lista de", "ranking dos mais",
+]
+
+def is_relevant(article):
+    """Return True if the article matches monitored topics and isn't in blocked categories."""
+    title_low = normalize(article.title)
+    desc_low  = normalize(article.description)
+    combined  = title_low + " " + desc_low
+
+    tokens = set(re.findall(r"[a-zà-ÿ]{4,}", combined))
+
+    # Check block phrases first (strongest signal)
+    for phrase in _BLOCK_PHRASES:
+        if normalize(phrase) in combined:
+            return False
+
+    # If mostly blocked tokens → skip
+    blocked_hits = len(tokens & _BLOCK_TOKENS)
+    keep_hits    = len(tokens & _KEEP_TOKENS)
+
+    if blocked_hits >= 2 and keep_hits == 0:
+        return False
+
+    # If no relevant tokens at all → skip (unless from investigative source)
+    if keep_hits == 0 and article.source not in {"Intercept","A Pública","Ag. Mural","Fiocruz"}:
+        return False
+
+    return True
+
+
+# ── 5-WORD SYNTHESIS ─────────────────────────────────────────────
+_SYNTHESIS_STOP = {
+    "para","como","sobre","entre","durante","apos","pelo","pela","pelos","pelas",
+    "este","esta","esses","essas","esse","essa","isso","isto","aquele","aquela",
+    "novo","nova","novos","novas","grande","grandes","primeiro","primeira","mais",
+    "menos","muito","muita","muitos","muitas","todo","toda","todos","todas",
+    "cada","qual","quais","outra","outro","outros","outras","mesmo","mesma",
+    "tambem","ainda","apenas","quando","onde","quem","como","porque","pois",
+}
+_PROPER_BONUS = re.compile(r'^[A-ZÁÉÍÓÚÂÊÔÃÕ]')
+
+def synthesize_5w(title, description=""):
+    """Distill a story into 5 significant words - a journalistic micro-headline."""
+    # Candidate pool: title tokens + first 100 chars of description
+    text = title + " " + (description or "")[:100]
+
+    # Extract tokens, score each
+    scored = []
+    for tok in re.findall(r"[A-Za-záéíóúâêôãõçÁÉÍÓÚÂÊÔÃÕÇ]+", text):
+        low = normalize(tok)
+        if len(low) < 3 or low in STOPWORDS or low in _SYNTHESIS_STOP:
+            continue
+        score = len(low)                            # longer = more specific
+        if _PROPER_BONUS.match(tok): score += 5    # proper nouns / acronyms
+        if low in _KEEP_TOKENS:      score += 3    # topic-relevant
+        if re.match(r"^\d", tok):    score += 4    # numbers/values
+        scored.append((score, tok))
+
+    # Deduplicate preserving order of first occurrence
+    seen = set(); unique = []
+    for sc, tok in sorted(scored, key=lambda x: (-x[0], text.index(x[1]))):
+        low = normalize(tok)
+        if low not in seen:
+            seen.add(low)
+            unique.append(tok)
+
+    # Take top 5 in order of appearance in original text
+    top5 = unique[:5]
+    # Re-sort by position in text for readability
+    positions = {normalize(t): text.lower().find(normalize(t)) for t in top5}
+    top5.sort(key=lambda t: positions.get(normalize(t), 9999))
+
+    return " ".join(top5) if top5 else title[:30]
+
+
 
 def normalize(t):
     return "".join(c for c in unicodedata.normalize("NFKD", t.lower())
@@ -117,7 +244,11 @@ class Article:
     def __init__(self, title, link, description, pub_date, source_name, source_emoji):
         self.title       = title.strip()
         self.link        = link.strip() if link else ""
-        self.description = clean_html(description or "")[:500]
+        _d = clean_html(description or "")
+        if len(_d) > 400:
+            cut = _d.rfind('. ', 0, 400)
+            _d = _d[:cut+1] if cut > 100 else _d[:400]
+        self.description = _d
         self.pub_date    = pub_date or ""
         self.source      = source_name
         self.emoji       = source_emoji
@@ -157,7 +288,7 @@ def fetch_rss(source):
     articles = []
     name  = source["name"]
     emoji = source["emoji"]
-    urls  = [source.get("rss",""), source.get("rss2","")]
+    urls  = [source.get("rss",""), source.get("rss2",""), source.get("rss3","")]
     urls  = [u for u in urls if u]
 
     for url in urls:
@@ -169,27 +300,34 @@ def fetch_rss(source):
                     print(f"  {name}: {len(arts)} artigos ✅  [{url[-45:]}]")
                     return arts
                 else:
-                    # Debug: show what we got
                     snippet = ' '.join(r.text[:120].split())
-
-                    print(f"  {name}: 200 mas 0 itens — body: {snippet}")
+                    print(f"  {name}: 200 / 0 itens - {snippet[:80]}")
+            elif r.status_code >= 500:
+                # Transient server error - retry once after 3s
+                print(f"  {name}: HTTP {r.status_code} (retry in 3s)...")
+                time.sleep(3)
+                try:
+                    r2 = requests.get(url, headers=HEADERS, timeout=15)
+                    if r2.status_code == 200:
+                        arts = _parse_response(r2, source)
+                        if arts:
+                            print(f"  {name}: {len(arts)} artigos ✅ (retry)")
+                            return arts
+                except Exception: pass
+                print(f"  {name}: HTTP {r.status_code} após retry")
             else:
                 print(f"  {name}: HTTP {r.status_code}  [{url[-45:]}]")
         except Exception as e:
             print(f"  {name}: {e.__class__.__name__}: {str(e)[:60]}")
 
-    # Playwright fallback for sites that block requests but work in a browser
-    arts = _playwright_scrape(source)
-    if arts:
-        print(f"  {name}: {len(arts)} artigos via Playwright ✅")
-        return arts
-
-    print(f"  {name}: ❌ sem artigos")
+    # Mark as needing Playwright - actual scraping done in main() with shared browser
+    print(f"  {name}: ❌ sem artigos (marcado para Playwright)")
+    source["_needs_playwright"] = True
     return []
 
 
 def _parse_response(r, source):
-    """Parse HTTP response — detect format and extract articles."""
+    """Parse HTTP response - detect format and extract articles."""
     name  = source["name"]
     emoji = source["emoji"]
     fmt   = source.get("fmt","rss")
@@ -197,24 +335,55 @@ def _parse_response(r, source):
     body  = r.content
     text  = r.text
 
-    # ── JSON detection ───────────────────────────────────────
-    is_json = "json" in ct or text.lstrip().startswith("{") or text.lstrip().startswith("[")
-    if is_json or fmt == "globo_json":
-        return _parse_json_feed(text, name, emoji)
+    head = text.lstrip()[:10]
 
-    # ── XML / RSS / Atom ─────────────────────────────────────
+    # ── WordPress REST API ───────────────────────────────────
+    if fmt == "wp_api" or "/wp-json/" in (source.get("rss","") + source.get("rss2","")):
+        if head.startswith("[") or "json" in ct:
+            arts = _parse_wp_api(text, name, emoji)
+            if arts: return arts
+
+    # ── XML / RSS / Atom  (check BEFORE JSON — G1 sends XML not JSON) ──
     is_xml = ("xml" in ct or "rss" in ct or
-              text.lstrip()[:5] in ("<rss ", "<?xml", "<feed"))
+              head.startswith("<?xml") or head.startswith("<rss") or
+              head.startswith("<feed") or head.startswith("<RSS"))
     if is_xml:
         arts = _parse_xml_feed(body, name, emoji)
         if arts: return arts
 
-    # ── HTML fallback (try to find structured data or links) ─
+    # ── JSON / Globo Dynamo ──────────────────────────────────
+    is_json = "json" in ct or head.startswith("{") or head.startswith("[")
+    if is_json or fmt == "globo_json":
+        arts = _parse_json_feed(text, name, emoji)
+        if arts: return arts
+
+    # ── HTML fallback ────────────────────────────────────────
     if "html" in ct or "<html" in text.lower()[:200]:
         return _parse_html_feed(text, name, emoji)
 
     return []
 
+
+
+def _parse_wp_api(text, name, emoji):
+    """Parse WordPress REST API JSON (GET /wp-json/wp/v2/posts)."""
+    articles = []
+    try:
+        posts = json.loads(text)
+        if not isinstance(posts, list):
+            return []
+        for post in posts:
+            tr = post.get("title", {})
+            title = clean_html(tr.get("rendered","") if isinstance(tr,dict) else str(tr))
+            link  = post.get("link", "")
+            er    = post.get("excerpt", {})
+            desc  = clean_html(er.get("rendered","") if isinstance(er,dict) else str(er))
+            date  = post.get("date", "")
+            if title and len(title) > 10:
+                articles.append(Article(title, link, desc, date, name, emoji))
+    except (json.JSONDecodeError, KeyError, TypeError, AttributeError):
+        pass
+    return articles
 
 def _parse_xml_feed(body, name, emoji):
     """Parse RSS 2.0 and Atom XML feeds. Handles namespaces."""
@@ -359,8 +528,54 @@ def _parse_html_feed(text, name, emoji):
     return articles
 
 
+def _playwright_scrape_batch(sources):
+    """Run Playwright once, scrape all given sources with shared browser."""
+    results = {}
+    try:
+        from playwright.sync_api import sync_playwright
+        from urllib.parse import urljoin
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(
+                headless=True,
+                args=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"])
+            for source in sources:
+                name  = source["name"]
+                emoji = source["emoji"]
+                url   = source.get("home", source.get("rss",""))
+                if not url:
+                    results[name] = []; continue
+                articles = []
+                try:
+                    ctx  = browser.new_context(user_agent=UA, locale="pt-BR")
+                    page = ctx.new_page()
+                    page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                    page.wait_for_timeout(2000)
+                    for loc in page.query_selector_all("a h1, a h2, a h3, article h2, .card h2, h2 a, h3 a"):
+                        try:
+                            text = (loc.inner_text() or "").strip()
+                            if len(text) < 20: continue
+                            parent = loc.evaluate_handle("el => el.closest('a') || el.querySelector('a')")
+                            href   = parent.get_attribute("href") if parent else ""
+                            if href and not href.startswith("http"):
+                                href = urljoin(url, href)
+                            articles.append(Article(text, href or "", "", "", name, emoji))
+                            if len(articles) >= 25: break
+                        except: continue
+                    ctx.close()
+                except Exception as e:
+                    print(f"  {name} PW err: {e}")
+                results[name] = articles
+            browser.close()
+    except ImportError:
+        for s in sources: results[s["name"]] = []
+    except Exception as e:
+        print(f"  PW batch err: {e}")
+        for s in sources: results.setdefault(s["name"], [])
+    return results
+
+
 def _playwright_scrape(source):
-    """Playwright fallback for JS-heavy sites. Returns articles or []."""
+    """Legacy single-source Playwright fallback (used if batch not available)."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -407,11 +622,12 @@ def _playwright_scrape(source):
 def cluster_articles(articles, min_shared=2, window_hours=24):
     """
     Group articles covering the same story.
-    Two articles are in the same cluster if they share ≥ min_shared significant tokens.
+    Two articles are in the same cluster if they share >= min_shared significant tokens.
     Returns list of clusters sorted by number of sources.
     """
-    recent = [a for a in articles if a.is_recent(window_hours)]
-    print(f"\n  Artigos recentes ({window_hours}h): {len(recent)}/{len(articles)}")
+    total_recent = sum(1 for a in articles if a.is_recent(window_hours))
+    recent = [a for a in articles if a.is_recent(window_hours) and is_relevant(a)]
+    print(f"  Artigos: {len(articles)} total → {total_recent} recentes ({window_hours}h) → {len(recent)} relevantes")
 
     clusters = []
     assigned = set()
@@ -421,17 +637,17 @@ def cluster_articles(articles, min_shared=2, window_hours=24):
             continue
         cluster = {"articles": [article], "tokens": set(article.tokens),
                    "sources": {article.source}, "indices": {i}}
-        # Find similar articles
+        # Find similar articles - check assigned to avoid duplicates across clusters
         for j, other in enumerate(recent):
-            if j <= i or j in assigned: continue
+            if j <= i or j in assigned: continue  # BUG FIX: skip already-assigned
             shared = article.tokens & other.tokens
             if len(shared) >= min_shared:
                 cluster["articles"].append(other)
                 cluster["tokens"] |= other.tokens
                 cluster["sources"].add(other.source)
                 cluster["indices"].add(j)
-        if len(cluster["articles"]) > 1:
-            assigned |= cluster["indices"]
+        # Always mark all articles in this cluster as assigned (fixes solo duplicates)
+        assigned |= cluster["indices"]
         clusters.append(cluster)
 
     # Sort by source count descending
@@ -439,10 +655,13 @@ def cluster_articles(articles, min_shared=2, window_hours=24):
     return clusters, recent
 
 def pick_representative(cluster):
-    """Pick the most informative article from a cluster."""
+    """Pick most informative article: investigative source > longest description."""
     arts = cluster["articles"]
-    # Prefer longest description, then longest title
-    return max(arts, key=lambda a: len(a.description)*3 + len(a.title))
+    return max(arts, key=lambda a: (
+        (1 if a.source in INVESTIGATIVE else 0) * 1000 +
+        len(a.description) * 3 +
+        len(a.title)
+    ))
 
 # ── 5W EXTRACTION ────────────────────────────────────────────────
 NAME_RE = re.compile(r'\b([A-Z][a-záéíóúâêôãõ]+(?:\s+[A-Z][a-záéíóúâêôãõ]+){1,4})\b')
@@ -454,12 +673,12 @@ def extract_5w(cluster):
     rep = pick_representative(cluster)
     full_text = rep.title + " " + rep.description
 
-    who   = ", ".join(list(dict.fromkeys(NAME_RE.findall(full_text)))[:3]) or "—"
+    who   = ", ".join(list(dict.fromkeys(NAME_RE.findall(full_text)))[:3]) or "-"
     what  = rep.title
     when  = DATE_RE.search(full_text)
     when  = when.group(0) if when else datetime.date.today().strftime("%d/%m/%Y")
     where = ", ".join(list(dict.fromkeys(PLACE_RE.findall(full_text)))[:2]) or "Brasil"
-    why   = (rep.description[:200] + "…") if len(rep.description) > 200 else rep.description or "—"
+    why   = (rep.description[:200] + "…") if len(rep.description) > 200 else rep.description or "-"
     value = VALUE_RE.search(full_text)
     value = value.group(0) if value else ""
     return {"who":who, "what":what, "when":when, "where":where, "why":why, "value":value}
@@ -521,12 +740,12 @@ def suggest_followups(cluster, sources_covered):
     # Gap analysis: major story not covered by investigative outlets
     sources = cluster["sources"]
     if len(sources) >= 3 and not (sources & INVESTIGATIVE):
-        suggestions.append("→ Nenhuma fonte investigativa cobriu — ângulo em aberto para aprofundamento")
+        suggestions.append("→ Nenhuma fonte investigativa cobriu - ângulo em aberto para aprofundamento")
     # Major story not in SP sources
     if len(sources) >= 3 and "G1-SP" not in sources:
         sp_tokens = {"sao paulo","paulista","estado","tarcisio","capital","interior"}
         if any(t in all_tokens for t in sp_tokens):
-            suggestions.append("→ G1-SP não cobriu — pode ter desdobramento local")
+            suggestions.append("→ G1-SP não cobriu - pode ter desdobramento local")
     return suggestions[:3]
 
 # ── FORMATAÇÃO TELEGRAM ───────────────────────────────────────────
@@ -548,21 +767,21 @@ def build_story_card(cluster, rank, date_str):
 
     # Header
     lines = [
-        f"{emoji} *{label}* #{rank} — {n_sources}/{len(SOURCES)} fontes",
+        f"{emoji} *{label}* #{rank} - {n_sources}/{len(SOURCES)} fontes",
         f"━━━",
     ]
 
     # 5W block
     title_short = w["what"][:120] + ("…" if len(w["what"])>120 else "")
     lines.append(f"📌 *{title_short}*")
-    if w["who"] and w["who"] != "—":
+    if w["who"] and w["who"] != "-":
         lines.append(f"👤 {w['who'][:80]}")
     if w["where"] and w["where"] != "Brasil":
         lines.append(f"📍 {w['where']}")
     lines.append(f"📅 {w['when']}")
     if w["value"]:
         lines.append(f"💰 {w['value']}")
-    if w["why"] and w["why"] != "—" and len(w["why"]) > 20:
+    if w["why"] and w["why"] != "-" and len(w["why"]) > 20:
         why_short = w["why"][:180] + ("…" if len(w["why"])>180 else "")
         lines.append(f"💬 _{why_short}_")
 
@@ -588,44 +807,57 @@ def build_story_card(cluster, rank, date_str):
     return "\n".join(lines)
 
 def build_summary(clusters, all_articles, date_str, failed_sources):
+    """
+    First message: compact header + max 6 stories synthesized to 5 words each.
+    No image previews. Links embedded per story.
+    """
     n_sources_ok = len(SOURCES) - len(failed_sources)
-    n_articles = len(all_articles)
-    viral    = sum(1 for c in clusters if len(c["sources"])>=5)
-    trending = sum(1 for c in clusters if 3<=len(c["sources"])<=4)
-    multi    = sum(1 for c in clusters if len(c["sources"])==2)
-    exclus   = sum(1 for c in clusters if len(c["sources"])==1)
+    n_articles   = len(all_articles)
+    viral    = sum(1 for c in clusters if len(c["sources"]) >= 5)
+    trending = sum(1 for c in clusters if 3 <= len(c["sources"]) <= 4)
+    multi    = sum(1 for c in clusters if len(c["sources"]) == 2)
+    exclus   = sum(1 for c in clusters if len(c["sources"]) == 1)
 
     lines = [
-        f"📰 *MONITOR DE NOTÍCIAS — {date_str}*",
-        f"🗞️ {n_sources_ok}/{len(SOURCES)} fontes | {n_articles} manchetes",
-        "━━━━━━━━━━━━━━━━━━━━",
-        f"🔥 Viral (5+ fontes): {viral}",
-        f"📈 Trending (3-4):    {trending}",
-        f"📰 Múltiplas (2):     {multi}",
-        f"🔍 Exclusiva (1):     {exclus}",
-        "━━━━━━━━━━━━━━━━━━━━",
+        f"📰 *MONITOR DE NOTÍCIAS - {date_str}*",
+        f"🗞️ {n_sources_ok}/{len(SOURCES)} fontes | {n_articles} pautas relevantes",
+        f"🔥 {viral} viral  \U0001f4c8 {trending} trending  \U0001f4f0 {multi} múltiplas  \U0001f50d {exclus} exclusivas",
+        "━━━",
     ]
 
-    # Top 10 clusters
-    for i, c in enumerate(clusters[:10], 1):
-        _,em,n,has_inv,_=score_story(c)
-        rep = pick_representative(c)
-        title = rep.title[:55] + ("…" if len(rep.title)>55 else "")
-        inv_flag = " 💡" if has_inv else ""
-        lines.append(f"{em} *#{i}* {n}f{inv_flag} — {title}")
+    # Max 6 stories - each synthesized to 5 words
+    top = clusters[:6]
+    for i, c in enumerate(top, 1):
+        _, em, n, has_inv, _ = score_story(c)
+        rep   = pick_representative(c)
+        synth = synthesize_5w(rep.title, rep.description)
+        inv   = " 💡" if has_inv else ""
+        # Up to 3 source links
+        src_links = []
+        seen_src  = set()
+        for art in c["articles"]:
+            if art.source not in seen_src:
+                seen_src.add(art.source)
+                lnk = f"[{art.emoji}]({art.link})" if art.link else art.emoji
+                src_links.append(lnk)
+            if len(src_links) >= 3: break
+        lines.append(f"{em} *{i}.* _{synth}_ | {n}f{inv}  " + " ".join(src_links))
+
+    if len(clusters) > 6:
+        lines.append(f"_+ {len(clusters) - 6} outras pautas nos cards abaixo_")
 
     if failed_sources:
         lines.append("━━━")
-        lines.append(f"⚠️ Falhas: {', '.join(failed_sources)}")
+        lines.append("⚠️ Sem resposta: " + ", ".join(failed_sources))
 
     return "\n".join(lines)
 
 def build_uncovered(solo_clusters, date_str):
-    """Report stories covered by only 1 source — potential exclusives."""
+    """Report stories covered by only 1 source - potential exclusives."""
     inv_solos    = [c for c in solo_clusters if c["sources"] & INVESTIGATIVE]
     grande_solos = [c for c in solo_clusters if c["sources"] <= GRANDE_IMPRENSA]
 
-    lines = [f"🔍 *EXCLUSIVAS & INVESTIGATIVAS — {date_str}*",
+    lines = [f"🔍 *EXCLUSIVAS & INVESTIGATIVAS - {date_str}*",
              f"_{len(solo_clusters)} histórias em apenas 1 fonte_", "━━━"]
 
     if inv_solos:
@@ -661,7 +893,7 @@ def send_telegram(text, silent=False):
             r = requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
                 json={"chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown",
-                      "disable_web_page_preview": False, "disable_notification": silent},
+                      "disable_web_page_preview": True, "disable_notification": silent},
                 timeout=15)
             _last_send = time.time()
             if r.status_code == 200: return True
@@ -682,21 +914,47 @@ def split_long(text, mx=3800):
 
 # ── MAIN ─────────────────────────────────────────────────────────
 def main():
-    hoje     = datetime.date.today()
-    date_str = hoje.strftime("%d/%m/%Y")
-    print(f"=== Monitor de Notícias v1.0 — {date_str} ===\n")
+    now      = datetime.datetime.now(datetime.timezone.utc).astimezone(
+                    datetime.timezone(datetime.timedelta(hours=-3)))  # BRT
+    date_str = now.strftime("%d/%m/%Y")
+    time_str = now.strftime("%H:%M")
+    run_str  = f"{date_str} {time_str}"
+    print(f"=== Monitor de Notícias v1.0 - {run_str} BRT ===\n")
 
-    # 1. Fetch all sources
+    # 1. Fetch all sources in parallel (max 6 workers)
+    # Playwright sources are serialised inside fetch_rss to share browser
     all_articles = []
     failed = []
-    for source in SOURCES:
-        arts = fetch_rss(source)
-        if not arts:
-            failed.append(source["name"])
-        all_articles.extend(arts)
+    print("  Coletando fontes em paralelo...")
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {pool.submit(fetch_rss, src): src for src in SOURCES}
+        for future in as_completed(futures):
+            src  = futures[future]
+            try:
+                arts = future.result()
+            except Exception as e:
+                print(f"  {src['name']} exc: {e}")
+                arts = []
+            if arts:
+                all_articles.extend(arts)
+            else:
+                failed.append(src["name"])
 
     total = len(all_articles)
-    print(f"\n  Total: {total} artigos de {len(SOURCES)-len(failed)} fontes")
+    print(f"\n  Total RSS: {total} artigos de {len(SOURCES)-len(failed)}/{len(SOURCES)} fontes")
+
+    # Playwright batch: all sources that failed RSS share one browser
+    pw_sources = [s for s in SOURCES if s.get("_needs_playwright")]
+    if pw_sources:
+        print(f"  Playwright: {len(pw_sources)} fontes...")
+        pw_arts = _playwright_scrape_batch(pw_sources)
+        for src_name, arts in pw_arts.items():
+            if arts:
+                all_articles.extend(arts)
+                if src_name in failed: failed.remove(src_name)
+                print(f"  {src_name}: {len(arts)} artigos via Playwright ✅")
+    total = len(all_articles)
+    print(f"  Total final: {total} artigos de {len(SOURCES)-len(failed)}/{len(SOURCES)} fontes")
 
     if total < 5:
         send_telegram(f"⚠️ Monitor de Notícias {date_str}: apenas {total} artigos coletados. Verificar feeds.")
@@ -704,14 +962,17 @@ def main():
 
     # 2. Cluster
     print("\n  Clusterizando...")
-    clusters, recent = cluster_articles(all_articles, min_shared=2, window_hours=24)
+    # Use shorter window for afternoon/evening runs to avoid morning repeats
+    hour_utc = datetime.datetime.utcnow().hour
+    window_h = 24 if hour_utc <= 12 else 10  # 7h run: 24h; 12h/17h/20h: 10h
+    clusters, recent = cluster_articles(all_articles, min_shared=2, window_hours=window_h)
     multi_source  = [c for c in clusters if len(c["sources"]) >= 2]
     single_source = [c for c in clusters if len(c["sources"]) == 1]
     print(f"  Clusters multi-fonte: {len(multi_source)}")
     print(f"  Histórias exclusivas: {len(single_source)}")
 
     # 3. Send summary
-    summary = build_summary(multi_source + single_source[:5], recent, date_str, failed)
+    summary = build_summary(multi_source + single_source[:5], recent, run_str, failed)
     send_telegram(summary)
     time.sleep(1)
 
@@ -719,8 +980,6 @@ def main():
     print("\n  Enviando fichas...")
     sent = 0
     for rank, cluster in enumerate(multi_source[:12], 1):
-        _,_,n,_,_=score_story(cluster)
-        if n < 2 and sent > 5: continue  # only include 2+ sources in detail
         card = build_story_card(cluster, rank, date_str)
         for part in split_long(card):
             send_telegram(part)
