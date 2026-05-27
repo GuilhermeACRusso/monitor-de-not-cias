@@ -1,4 +1,3 @@
-
 """
 Monitor de Notícias v1.0 — Análise de cobertura jornalística brasileira
 =======================================================================
@@ -31,43 +30,61 @@ SOURCES = [
     # Grande imprensa
     {"name": "G1",           "emoji": "🔵", "tier": "grande",
      "rss":  "https://g1.globo.com/dynamo/ultimas-noticias/rss2.xml",
-     "home": "https://g1.globo.com/"},
+     "home": "https://g1.globo.com/",
+     "fmt":  "globo_json"},   # Globo uses JSON, not XML
     {"name": "G1-SP",        "emoji": "🔵", "tier": "grande",
      "rss":  "https://g1.globo.com/dynamo/sao-paulo/rss2.xml",
-     "home": "https://g1.globo.com/sp/sao-paulo/"},
+     "home": "https://g1.globo.com/sp/sao-paulo/",
+     "fmt":  "globo_json"},
     {"name": "Folha",        "emoji": "🟠", "tier": "grande",
      "rss":  "https://feeds.folha.uol.com.br/emcimadahora/rss091.xml",
-     "home": "https://www1.folha.uol.com.br/ultimas-noticias/"},
+     "home": "https://www1.folha.uol.com.br/ultimas-noticias/",
+     "fmt":  "rss"},
     {"name": "Estadão",      "emoji": "🔴", "tier": "grande",
-     "rss":  "https://www.estadao.com.br/arc/outboundfeeds/rss/",
-     "home": "https://www.estadao.com.br/ultimas/"},
+     "rss":  "https://www.estadao.com.br/arc/outboundfeeds/rss/?outputType=xml",
+     "rss2": "https://www.estadao.com.br/ultimas/",
+     "home": "https://www.estadao.com.br/ultimas/",
+     "fmt":  "rss"},
     {"name": "O Globo",      "emoji": "⚫", "tier": "grande",
-     "rss":  "https://oglobo.globo.com/rss.xml",
-     "home": "https://oglobo.globo.com/ultimas-noticias/"},
+     "rss":  "https://oglobo.globo.com/arc/outboundfeeds/rss/?outputType=xml",
+     "rss2": "https://oglobo.globo.com/ultimas-noticias/",
+     "home": "https://oglobo.globo.com/ultimas-noticias/",
+     "fmt":  "rss"},
     {"name": "Metrópoles",   "emoji": "🟣", "tier": "grande",
      "rss":  "https://www.metropoles.com/feed/",
-     "home": "https://www.metropoles.com/"},
+     "home": "https://www.metropoles.com/",
+     "fmt":  "rss"},
     # Investigativa / especializada
     {"name": "Intercept",    "emoji": "🔷", "tier": "investigativa",
-     "rss":  "https://theintercept.com/brasil/feed/?rss=1",
-     "home": "https://www.intercept.com.br/"},
+     "rss":  "https://www.intercept.com.br/feed/",
+     "home": "https://www.intercept.com.br/",
+     "fmt":  "rss"},
     {"name": "A Pública",    "emoji": "🟢", "tier": "investigativa",
      "rss":  "https://apublica.org/feed/",
-     "home": "https://apublica.org/"},
+     "home": "https://apublica.org/",
+     "fmt":  "rss"},
     {"name": "Ag. Mural",    "emoji": "🟡", "tier": "investigativa",
      "rss":  "https://agenciamural.org.br/feed/",
-     "home": "https://agenciamural.org.br/noticias/"},
+     "rss2": "https://agenciamural.org.br/noticias/",
+     "home": "https://agenciamural.org.br/noticias/",
+     "fmt":  "rss"},
     # Científica / acadêmica
     {"name": "Fiocruz",      "emoji": "🏥", "tier": "cientifica",
-     "rss":  "https://agencia.fiocruz.br/feed",
-     "home": "https://agencia.fiocruz.br/"},
+     "rss":  "https://agencia.fiocruz.br/feed/",
+     "rss2": "https://agencia.fiocruz.br/noticias",
+     "home": "https://agencia.fiocruz.br/",
+     "fmt":  "rss"},
     {"name": "Jornal USP",   "emoji": "🎓", "tier": "cientifica",
      "rss":  "https://jornal.usp.br/feed/",
-     "home": "https://jornal.usp.br/"},
+     "home": "https://jornal.usp.br/",
+     "fmt":  "rss"},
     {"name": "Ag. Galão",    "emoji": "🎭", "tier": "cultural",
      "rss":  "https://agenciagalo.com/feed/",
-     "home": "https://agenciagalo.com/"},
+     "rss2": "https://agenciagalo.com/",
+     "home": "https://agenciagalo.com/",
+     "fmt":  "rss"},
 ]
+
 
 # ── STOPWORDS E NORMALIZAÇÃO ─────────────────────────────────────
 STOPWORDS = {
@@ -127,71 +144,264 @@ UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
 HEADERS = {"User-Agent": UA, "Accept": "application/rss+xml,application/xml,text/html,*/*",
            "Accept-Language": "pt-BR,pt;q=0.9"}
 
+
 def fetch_rss(source):
-    """Fetch and parse RSS feed. Returns list of Articles."""
+    """
+    Universal feed fetcher. Handles:
+      - Standard RSS 2.0 (item elements)
+      - Atom feeds (entry elements)
+      - Globo JSON dynamo format
+      - JSON Feed (jsonfeed.org spec)
+      - HTML fallback via Playwright
+    """
     articles = []
-    url = source.get("rss","")
-    if not url: return articles
+    name  = source["name"]
+    emoji = source["emoji"]
+    urls  = [source.get("rss",""), source.get("rss2","")]
+    urls  = [u for u in urls if u]
+
+    for url in urls:
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=15)
+            if r.status_code == 200:
+                arts = _parse_response(r, source)
+                if arts:
+                    print(f"  {name}: {len(arts)} artigos ✅  [{url[-45:]}]")
+                    return arts
+                else:
+                    # Debug: show what we got
+                    snippet = ' '.join(r.text[:120].split())
+
+                    print(f"  {name}: 200 mas 0 itens — body: {snippet}")
+            else:
+                print(f"  {name}: HTTP {r.status_code}  [{url[-45:]}]")
+        except Exception as e:
+            print(f"  {name}: {e.__class__.__name__}: {str(e)[:60]}")
+
+    # Playwright fallback for sites that block requests but work in a browser
+    arts = _playwright_scrape(source)
+    if arts:
+        print(f"  {name}: {len(arts)} artigos via Playwright ✅")
+        return arts
+
+    print(f"  {name}: ❌ sem artigos")
+    return []
+
+
+def _parse_response(r, source):
+    """Parse HTTP response — detect format and extract articles."""
+    name  = source["name"]
+    emoji = source["emoji"]
+    fmt   = source.get("fmt","rss")
+    ct    = r.headers.get("content-type","").lower()
+    body  = r.content
+    text  = r.text
+
+    # ── JSON detection ───────────────────────────────────────
+    is_json = "json" in ct or text.lstrip().startswith("{") or text.lstrip().startswith("[")
+    if is_json or fmt == "globo_json":
+        return _parse_json_feed(text, name, emoji)
+
+    # ── XML / RSS / Atom ─────────────────────────────────────
+    is_xml = ("xml" in ct or "rss" in ct or
+              text.lstrip()[:5] in ("<rss ", "<?xml", "<feed"))
+    if is_xml:
+        arts = _parse_xml_feed(body, name, emoji)
+        if arts: return arts
+
+    # ── HTML fallback (try to find structured data or links) ─
+    if "html" in ct or "<html" in text.lower()[:200]:
+        return _parse_html_feed(text, name, emoji)
+
+    return []
+
+
+def _parse_xml_feed(body, name, emoji):
+    """Parse RSS 2.0 and Atom XML feeds. Handles namespaces."""
+    articles = []
     try:
-        r = requests.get(url, headers=HEADERS, timeout=15)
-        if r.status_code != 200:
-            print(f"  {source['name']}: HTTP {r.status_code}")
-            return articles
-        body = r.content
         root = ET.fromstring(body)
-        # Handle both RSS 2.0 and Atom
-        ns = {"atom": "http://www.w3.org/2005/Atom"}
-        items = root.findall(".//item") or root.findall(".//atom:entry", ns)
-        for item in items:
-            def get(tag, default=""):
-                el = item.find(tag) or item.find(f"{{http://www.w3.org/2005/Atom}}{tag}")
-                if el is None: return default
-                return (el.text or default).strip()
-            title = get("title") or get("headline")
-            link  = get("link") or get("guid")
-            # Atom uses <link href="..."/>
-            if not link:
-                lel = item.find("{http://www.w3.org/2005/Atom}link")
+        tag = root.tag.lower()
+
+        # RSS 2.0
+        if "rss" in tag:
+            for item in root.findall(".//item"):
+                def g(t): el=item.find(t); return (el.text or "").strip() if el is not None else ""
+                title = g("title")
+                link  = g("link") or g("guid")
+                desc  = g("description") or g("{http://purl.org/rss/1.0/modules/content/}encoded")
+                date  = g("pubDate")
+                if title and len(title) > 10:
+                    articles.append(Article(clean_html(title), link, desc, date, name, emoji))
+
+        # Atom
+        elif "feed" in tag or "{http://www.w3.org/2005/Atom}" in root.tag:
+            ns = "http://www.w3.org/2005/Atom"
+            for entry in root.findall(f"{{{ns}}}entry"):
+                def ga(t):
+                    el = entry.find(f"{{{ns}}}{t}")
+                    return (el.text or "").strip() if el is not None else ""
+                title = ga("title")
+                link  = ""
+                lel   = entry.find(f"{{{ns}}}link")
                 if lel is not None: link = lel.get("href","")
-            desc  = get("description") or get("summary") or get("content") or get("{http://purl.org/rss/1.0/modules/content/}encoded")
-            date  = get("pubDate") or get("published") or get("updated")
-            if title and len(title) > 10:
-                articles.append(Article(title, link, desc, date, source["name"], source["emoji"]))
-        print(f"  {source['name']}: {len(articles)} artigos ✅")
+                desc  = ga("summary") or ga("content")
+                date  = ga("published") or ga("updated")
+                if title and len(title) > 10:
+                    articles.append(Article(clean_html(title), link, desc, date, name, emoji))
+
+        # RSS 1.0 / RDF
+        else:
+            ns_rss = "http://purl.org/rss/1.0/"
+            for item in root.findall(f"{{{ns_rss}}}item"):
+                title = item.findtext(f"{{{ns_rss}}}title") or ""
+                link  = item.findtext(f"{{{ns_rss}}}link") or ""
+                desc  = item.findtext(f"{{{ns_rss}}}description") or ""
+                if title and len(title) > 10:
+                    articles.append(Article(clean_html(title), link, desc, "", name, emoji))
+
     except ET.ParseError:
-        # Try HTML scraping fallback
-        articles = fetch_html_headlines(source)
-    except Exception as e:
-        print(f"  {source['name']}: {e}")
+        pass
     return articles
 
-def fetch_html_headlines(source):
-    """Fallback: scrape headlines from HTML page."""
+
+def _parse_json_feed(text, name, emoji):
+    """Parse JSON Feed spec, Globo Dynamo format, or any reasonable JSON."""
     articles = []
     try:
-        r = requests.get(source.get("home",""), headers=HEADERS, timeout=15)
-        if r.status_code != 200: return articles
-        html = r.text
-        # Find headline links: <a href="...">Title text</a> or <h2>/<h3> content
-        patterns = [
-            r'<(?:h[123]|a)[^>]*href="(https?://[^"]+)"[^>]*>\s*([^<]{20,150})',
-            r'"url"\s*:\s*"(https?://[^"]+)"[^}]*"headline"\s*:\s*"([^"]{20,150})"',
-        ]
-        seen = set()
-        for pat in patterns:
-            for href, text in re.findall(pat, html):
-                text = clean_html(text).strip()
-                if len(text) > 25 and text not in seen:
-                    seen.add(text)
-                    articles.append(Article(
-                        text, href, "", "",
-                        source["name"], source["emoji"]))
-                    if len(articles) >= 30: break
-        if articles:
-            print(f"  {source['name']}: {len(articles)} artigos via HTML ✅")
-    except Exception as e:
-        print(f"  {source['name']} HTML fallback: {e}")
+        data = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return []
+
+    # JSON Feed 1.x spec
+    if isinstance(data, dict) and "items" in data:
+        items = data["items"]
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict):
+                    title = (item.get("title") or item.get("headline") or
+                             item.get("summary",""))
+                    link  = (item.get("url") or item.get("external_url") or
+                             item.get("id",""))
+                    desc  = (item.get("content_text") or item.get("content_html") or
+                             item.get("summary",""))
+                    date  = item.get("date_published") or item.get("date_modified","")
+                    # Globo Dynamo nested format
+                    if not title and "content" in item and isinstance(item["content"], dict):
+                        c = item["content"]
+                        title = c.get("title") or c.get("headline","")
+                        link  = c.get("url","")
+                        desc  = c.get("summary","")
+                        date  = c.get("created","")
+                    if title and len(clean_html(title)) > 10:
+                        articles.append(Article(
+                            clean_html(title), link, clean_html(desc), date, name, emoji))
+
+    # Array at root
+    elif isinstance(data, list):
+        for item in data[:50]:
+            if isinstance(item, dict):
+                title = item.get("title") or item.get("headline","")
+                link  = item.get("url") or item.get("link","")
+                desc  = item.get("description") or item.get("summary","")
+                if title and len(title) > 10:
+                    articles.append(Article(clean_html(title), link, desc, "", name, emoji))
+
     return articles
+
+
+def _parse_html_feed(text, name, emoji):
+    """
+    Extract headlines from HTML using JSON-LD, og:tags, and heading patterns.
+    Used when a site serves HTML instead of a feed.
+    """
+    articles = []
+
+    # JSON-LD structured data (NewsArticle schema)
+    for blob in re.findall(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>',
+                           text, re.DOTALL):
+        try:
+            data = json.loads(blob)
+            if not isinstance(data, list): data = [data]
+            for obj in data:
+                if obj.get("@type") in ("NewsArticle","Article","WebPage"):
+                    title = obj.get("headline","")
+                    link  = obj.get("url","")
+                    desc  = obj.get("description","")
+                    date  = obj.get("datePublished","")
+                    if title and len(title) > 15:
+                        articles.append(Article(title, link, desc, date, name, emoji))
+        except: pass
+
+    if articles: return articles[:30]
+
+    # Open Graph tags
+    og_title = re.search(r'<meta[^>]+property="og:title"[^>]+content="([^"]{20,120})"', text)
+    og_url   = re.search(r'<meta[^>]+property="og:url"[^>]+content="([^"]+)"', text)
+    og_desc  = re.search(r'<meta[^>]+property="og:description"[^>]+content="([^"]+)"', text)
+    if og_title:
+        articles.append(Article(
+            og_title.group(1),
+            og_url.group(1) if og_url else "",
+            og_desc.group(1) if og_desc else "",
+            "", name, emoji))
+
+    # Link + heading pattern
+    seen = set()
+    for href, txt in re.findall(r'<a[^>]+href="(https?://[^"]+)"[^>]*>([^<]{25,120})</a>', text):
+        t = clean_html(txt).strip()
+        if len(t) > 25 and t not in seen and not any(
+                x in t.lower() for x in ["menu","login","assine","cadastre","newsletter"]):
+            seen.add(t)
+            articles.append(Article(t, href, "", "", name, emoji))
+            if len(articles) >= 30: break
+
+    return articles
+
+
+def _playwright_scrape(source):
+    """Playwright fallback for JS-heavy sites. Returns articles or []."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return []
+
+    name  = source["name"]
+    emoji = source["emoji"]
+    url   = source.get("home", source.get("rss",""))
+    if not url: return []
+
+    articles = []
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(
+                headless=True,
+                args=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"])
+            ctx  = browser.new_context(user_agent=UA, locale="pt-BR")
+            page = ctx.new_page()
+            page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            page.wait_for_timeout(3000)
+
+            # Try to find headlines: <h1/h2/h3> inside <a> tags
+            for loc in page.query_selector_all("a h1, a h2, a h3, article h2, .card h2"):
+                try:
+                    text = (loc.inner_text() or "").strip()
+                    if len(text) < 20: continue
+                    parent = loc.evaluate_handle("el => el.closest('a')")
+                    href   = parent.get_attribute("href") if parent else ""
+                    if href and not href.startswith("http"):
+                        from urllib.parse import urljoin
+                        href = urljoin(url, href)
+                    articles.append(Article(text, href or "", "", "", name, emoji))
+                    if len(articles) >= 25: break
+                except: continue
+
+            browser.close()
+    except Exception as e:
+        print(f"  {name} PW: {e}")
+    return articles
+
+
 
 # ── CLUSTERING ───────────────────────────────────────────────────
 def cluster_articles(articles, min_shared=2, window_hours=24):
