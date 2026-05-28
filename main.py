@@ -135,14 +135,23 @@ _KEEP_TOKENS = {
 _BLOCK_TOKENS = {
     "celebridade","famoso","famosa","ator","atriz","cantor","cantora","artista",
     "fofoca","novela","reality","bbb","bigbrother","namorado","namorada","casamento",
-    "separacao","divorcio","gravidez","bebe","filho","filha",  # when about celebs
+    "separacao","divorcio","gravidez",
     "receita","culinaria","gastronomia","chef","restaurante","prato","ingrediente",
     "moda","roupa","look","estilo","beleza","maquiagem","skincare","cabelo",
-    "horoscopo","signo","esporte","futebol","gol","campeonato","copa",  # unless policy
-    "funk","pagode","sertanejo","show","concert","festival","musica",   # unless policy
+    "horoscopo","signo",
     "serie","filme","cinema","streaming","netflix","disney","amazon",
     "viagem","turismo","praia","hotel","hospedagem","passeio",
+    "ingresso","turnê","show","concerto",  # entertainment events
 }
+
+# Hard-block phrases that always mean celebrity content
+_BLOCK_HARD_PHRASES = [
+    "anuncia show", "anuncia turnê", "anuncia tour", "venda de ingressos",
+    "onde comprar ingresso", "data e local", "saiba data", "como comprar",
+    "receita de", "como fazer", "dicas para", "veja como",
+    "look do dia", "estilo de", "antes e depois",
+    "o que comer", "onde comer", "melhor restaurante",
+]
 
 # Topic-specific block phrases (must match as substring in normalized title)
 _BLOCK_PHRASES = [
@@ -152,6 +161,28 @@ _BLOCK_PHRASES = [
     "top 10", "lista de", "ranking dos mais",
 ]
 
+
+# Tokens that establish a Brazilian angle for international stories
+_BRAZIL_TOKENS = {
+    # País e gentílicos
+    "brasil","brasileiro","brasileira","brasileiros","brasileiras",
+    # Cidades e estados-chave
+    "paulo","paulista","carioca","brasilia","mineiro","gaucho",
+    "baiano","cearense","pernambucano","fluminense","minas",
+    # Políticos
+    "lula","bolsonaro","tarcisio","haddad","moro","flavio","eduardo",
+    "gleisi","tebet","pacheco","lira","ciro","marina","damares",
+    # Instituições
+    "stf","stj","tcu","tse","pgr","mpf","ibge","ibama","funai","inpe",
+    "camara","senado","congresso","planalto","governo",
+    # Moeda e economia BR
+    "real","reais","brl","selic","ipca","ibovespa",
+    # Partidos
+    "pt","pl","mdb","psdb","pdT","psd","republicanos","solidariedade",
+    # Violência no BR (requer contexto)
+    "feminicidio","femicidio","mulher",
+}
+
 def is_relevant(article):
     """Return True if the article matches monitored topics and isn't in blocked categories."""
     title_low = normalize(article.title)
@@ -160,7 +191,11 @@ def is_relevant(article):
 
     tokens = set(re.findall(r"[a-zà-ÿ]{4,}", combined))
 
-    # Check block phrases first (strongest signal)
+    # Hard-block phrases (always reject regardless of other signals)
+    for phrase in _BLOCK_HARD_PHRASES:
+        if normalize(phrase) in combined:
+            return False
+    # Legacy block phrases
     for phrase in _BLOCK_PHRASES:
         if normalize(phrase) in combined:
             return False
@@ -172,58 +207,59 @@ def is_relevant(article):
     if blocked_hits >= 2 and keep_hits == 0:
         return False
 
-    # If no relevant tokens at all → skip (unless from investigative source)
-    if keep_hits == 0 and article.source not in {"Intercept","A Pública","Ag. Mural","Fiocruz"}:
+    # International stories must have a Brazilian angle
+    has_brazil = bool(tokens & _BRAZIL_TOKENS)
+
+    # If nothing relevant AND no Brazil angle AND not investigative source → skip
+    if keep_hits == 0 and not has_brazil and article.source not in {"Intercept","A Pública","Ag. Mural","Fiocruz"}:
+        return False
+
+    # If marginally relevant but zero Brazil angle → skip (e.g. German crime story)
+    if keep_hits <= 1 and not has_brazil:
         return False
 
     return True
 
 
 # ── 5-WORD SYNTHESIS ─────────────────────────────────────────────
-_SYNTHESIS_STOP = {
-    "para","como","sobre","entre","durante","apos","pelo","pela","pelos","pelas",
-    "este","esta","esses","essas","esse","essa","isso","isto","aquele","aquela",
-    "novo","nova","novos","novas","grande","grandes","primeiro","primeira","mais",
-    "menos","muito","muita","muitos","muitas","todo","toda","todos","todas",
-    "cada","qual","quais","outra","outro","outros","outras","mesmo","mesma",
-    "tambem","ainda","apenas","quando","onde","quem","como","porque","pois",
-}
-_PROPER_BONUS = re.compile(r'^[A-ZÁÉÍÓÚÂÊÔÃÕ]')
-
-def synthesize_5w(title, description=""):
-    """Distill a story into 5 significant words - a journalistic micro-headline."""
-    # Candidate pool: title tokens + first 100 chars of description
-    text = title + " " + (description or "")[:100]
-
-    # Extract tokens, score each
-    scored = []
-    for tok in re.findall(r"[A-Za-záéíóúâêôãõçÁÉÍÓÚÂÊÔÃÕÇ]+", text):
-        low = normalize(tok)
-        if len(low) < 3 or low in STOPWORDS or low in _SYNTHESIS_STOP:
-            continue
-        score = len(low)                            # longer = more specific
-        if _PROPER_BONUS.match(tok): score += 5    # proper nouns / acronyms
-        if low in _KEEP_TOKENS:      score += 3    # topic-relevant
-        if re.match(r"^\d", tok):    score += 4    # numbers/values
-        scored.append((score, tok))
-
-    # Deduplicate preserving order of first occurrence
-    seen = set(); unique = []
-    for sc, tok in sorted(scored, key=lambda x: (-x[0], text.index(x[1]))):
-        low = normalize(tok)
-        if low not in seen:
-            seen.add(low)
-            unique.append(tok)
-
-    # Take top 5 in order of appearance in original text
-    top5 = unique[:5]
-    # Re-sort by position in text for readability
-    positions = {normalize(t): text.lower().find(normalize(t)) for t in top5}
-    top5.sort(key=lambda t: positions.get(normalize(t), 9999))
-
-    return " ".join(top5) if top5 else title[:30]
+def short_headline(title, description=""):
+    """
+    Produce a compact readable headline for the summary message.
+    Uses the actual cleaned title, not token extraction.
+    Steps: clean dateline → strip EXCLUSIVO → trim at punctuation → 55 chars.
+    """
+    t = clean_headline(title).strip()
+    # Remove trailing boilerplate after "; saiba", "; veja", "; entenda"
+    t = re.sub(r"\s*[;:,]\s*(?:saiba|veja|entenda|confira|leia|entenda\s+mais).*$", "", t, flags=re.I)
+    # Trim to first natural break if too long
+    if len(t) > 55:
+        for sep in [";", " — ", " - ", ","]:
+            idx = t.find(sep)
+            if 25 < idx < 60:
+                t = t[:idx].strip()
+                break
+    # Hard cap
+    if len(t) > 60: t = t[:57] + "…"
+    return t
 
 
+
+# Wire datelines# Wire datelines that contaminate headlines
+_DATELINES = re.compile(
+    r"^(?:BRASÍLIA|SÃO PAULO|RIO DE JANEIRO|SÃO PAULO|BELO HORIZONTE|"
+    r"SALVADOR|FORTALEZA|RECIFE|MANAUS|CURITIBA|PORTO ALEGRE|BELÉM|"
+    r"GOIÂNIA|FLORIANÓPOLIS|CAMPO GRANDE|TERESINA|MACEIÓ|NATAL|JOÃO PESSOA|"
+    r"ARACAJU|MACAPÁ|BOA VISTA|PORTO VELHO|RIO BRANCO|PALMAS|VITÓRIA|"
+    r"BRASILIA|SAO PAULO|RIO)\s*[-–]\s*",
+    re.I | re.U
+)
+_EXCLUSIVO = re.compile(r"^(?:EXCLUSIVO|EXCLUSIVA|ESPECIAL|BREAKING|ALERTA|ATENÇÃO)\s*[:\-]?\s*", re.I)
+
+def clean_headline(title):
+    """Remove wire datelines and EXCLUSIVO prefixes before synthesis."""
+    t = _DATELINES.sub("", title).strip()
+    t = _EXCLUSIVO.sub("", t).strip()
+    return t
 
 def normalize(t):
     return "".join(c for c in unicodedata.normalize("NFKD", t.lower())
@@ -242,7 +278,7 @@ def clean_html(text):
 # ── DATA MODEL ───────────────────────────────────────────────────
 class Article:
     def __init__(self, title, link, description, pub_date, source_name, source_emoji):
-        self.title       = title.strip()
+        self.title       = clean_headline(title.strip())
         self.link        = link.strip() if link else ""
         _d = clean_html(description or "")
         if len(_d) > 400:
@@ -665,23 +701,103 @@ def pick_representative(cluster):
 
 # ── 5W EXTRACTION ────────────────────────────────────────────────
 NAME_RE = re.compile(r'\b([A-Z][a-záéíóúâêôãõ]+(?:\s+[A-Z][a-záéíóúâêôãõ]+){1,4})\b')
-DATE_RE = re.compile(r'\b(\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?|\b(?:segunda|terça|quarta|quinta|sexta|sábado|domingo)(?:-feira)?)\b', re.I)
+DATE_RE = re.compile(r'\b(\d{1,2}/\d{1,2}/\d{4})\b')
+
+def parse_date_br(raw):
+    """Convert any date format to DD/MM/YYYY. Returns today's date on failure."""
+    if not raw: return datetime.date.today().strftime("%d/%m/%Y")
+    raw = raw.strip()
+    # ISO: 2026-05-27T... or 2026-05-27
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})", raw)
+    if m: return f"{m.group(3)}/{m.group(2)}/{m.group(1)}"
+    # Already BR: 27/05/2026
+    m = re.match(r"(\d{2})/(\d{2})/(\d{4})", raw)
+    if m: return raw[:10]
+    # RFC 822: Wed, 27 May 2026 10:00:00 +0000
+    try:
+        import email.utils
+        dt = email.utils.parsedate_to_datetime(raw)
+        return dt.strftime("%d/%m/%Y")
+    except Exception: pass
+    # "27 de maio de 2026"
+    _MMAP = {"jan":1,"fev":2,"mar":3,"abr":4,"mai":5,"jun":6,
+             "jul":7,"ago":8,"set":9,"out":10,"nov":11,"dez":12,
+             "january":1,"february":2,"march":3,"april":4,"may":5,"june":6,
+             "july":7,"august":8,"september":9,"october":10,"november":11,"december":12}
+    m2 = re.search(r"(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d{4})", raw, re.I)
+    if m2:
+        mes = _MMAP.get(normalize(m2.group(2))[:3])
+        if mes: return f"{int(m2.group(1)):02d}/{mes:02d}/{m2.group(3)}"
+    # Day-of-week or unknown — fall back to today
+    return datetime.date.today().strftime("%d/%m/%Y")
 VALUE_RE = re.compile(r'R\$\s*[\d.,]+\s*(?:bilh|milh|mi\b|bi\b)', re.I)
 PLACE_RE = re.compile(r'\b(São Paulo|Rio de Janeiro|Brasília|Brasil|SP|RJ|DF|Minas Gerais|Bahia|Goiás|Pará)\b')
 
-def extract_5w(cluster):
-    rep = pick_representative(cluster)
-    full_text = rep.title + " " + rep.description
+PLACE_NAMES = {
+    "brasilia","brasil","sao paulo","rio de janeiro","belo horizonte",
+    "minas gerais","estados unidos","texas","washington","alemanha",
+    "argentina","china","russia","franca","alemanha","italia",
+}
 
-    who   = ", ".join(list(dict.fromkeys(NAME_RE.findall(full_text)))[:3]) or "-"
-    what  = rep.title
-    when  = DATE_RE.search(full_text)
-    when  = when.group(0) if when else datetime.date.today().strftime("%d/%m/%Y")
-    where = ", ".join(list(dict.fromkeys(PLACE_RE.findall(full_text)))[:2]) or "Brasil"
-    why   = (rep.description[:200] + "…") if len(rep.description) > 200 else rep.description or "-"
-    value = VALUE_RE.search(full_text)
-    value = value.group(0) if value else ""
-    return {"who":who, "what":what, "when":when, "where":where, "why":why, "value":value}
+# People/orgs that are clearly news actors (not places, not project names)
+_NOISE_NAMES = re.compile(
+    r"(Times\s+Square|Boulevard|Departamento\s+de|Ministério\s+da|"
+    r"Supremo\s+Tribunal|Superior\s+Tribunal|Polícia\s+Civil|"
+    r"Polícia\s+Federal|Prefeitura|Secretaria|Câmara\s+dos|"
+    r"Congresso\s+Nacional)", re.I)
+
+def extract_5w(cluster):
+    rep  = pick_representative(cluster)
+    desc = rep.description
+
+    # Strip content warning sentences at start of description
+    for _warn in ["Alerta:", "Alerta -", "Aviso:", "Aviso -"]:
+        if desc.lower().startswith(_warn.lower()):
+            _cut = desc.find(". ", len(_warn))
+            if _cut > 0: desc = desc[_cut+2:].strip()
+            break
+
+    full_text = rep.title + " " + desc
+
+    # WHO — only human names (2+ capitalized words, not a known noise pattern)
+    raw_names = list(dict.fromkeys(NAME_RE.findall(full_text)))
+    human_names = []
+    for n in raw_names:
+        if _NOISE_NAMES.search(n): continue
+        if n.isupper(): continue
+        # Skip if any word in the name is a known place
+        words = normalize(n).split()
+        if any(w in PLACE_NAMES for w in words): continue
+        # Skip short names or numbers
+        if len(n) < 4: continue
+        human_names.append(n)
+    who = ", ".join(human_names[:2]) if human_names else ""
+
+    # WHAT — cleaned headline
+    what = clean_headline(rep.title)
+
+    # WHEN — publication date preferred over in-text date
+    rep_date = parse_date_br(rep.pub_date) if rep.pub_date else ""
+    when = rep_date or (DATE_RE.search(full_text).group(0) if DATE_RE.search(full_text) else "")
+
+    # WHERE — only if specific (not just "Brasil")
+    places = list(dict.fromkeys(PLACE_RE.findall(full_text)))
+    where  = ", ".join(p for p in places[:2] if p not in ("Brasil","SP","RJ","DF")) or ""
+
+    # WHY — first real sentence of description (not content warning)
+    if desc and len(desc) > 30:
+        # Get first sentence
+        first = re.split(r"(?<=[.!?])\s+[A-ZÁÉÍÓÚ]", desc)[0].strip()
+        if len(first) > 220: first = first[:217] + "…"
+        why = first
+    else:
+        why = ""
+
+    # VALUE
+    vm = VALUE_RE.search(full_text)
+    value = vm.group(0) if vm else ""
+
+    return {"who":who,"what":what,"when":when,"where":where,"why":why,"value":value}
 
 # ── STORY SCORING ────────────────────────────────────────────────
 INVESTIGATIVE = {"Intercept","A Pública","Ag. Mural","Fiocruz","Jornal USP","Ag. Galão"}
@@ -701,32 +817,77 @@ def score_story(cluster):
         label, emoji = "💡 INVESTIGATIVA", "💡"
     return label, emoji, n, bool(inv), bool(grande)
 
+STORY_CATEGORIES = [
+    # (token_set, emoji, label)
+    ({"corrupcao","improbidade","fraude","desvio","superfaturamento","lavagem"},
+     "🔎", "Investigativo"),
+    ({"privatizacao","concessao","desestatizacao","leilao","ppp","sabesp","cptm","metro"},
+     "🏭", "Privatização"),
+    ({"preso","prisao","pena","condenado","policia","crime","trafico","corrupcao"},
+     "⚖️", "Justiça/Crime"),
+    ({"stf","supremo","tribunal","juiz","juiza","liminar","decisao","sentenca"},
+     "🏛️", "Judiciário"),
+    ({"bolsonaro","lula","tarcisio","presidente","governador","ministro","senador"},
+     "🏛️", "Política"),
+    ({"economia","inflacao","juros","pib","emprego","desemprego","mercado","dolar"},
+     "💰", "Economia"),
+    ({"paulo","paulista","paulistano","prefeitura","covas","nunes","sp"},
+     "🏙️", "São Paulo"),
+    ({"saude","doenca","virus","vacina","hospital","sus","dengue","cancer"},
+     "🏥", "Saúde"),
+    ({"ambiental","clima","desmatamento","queimada","carbono","emissao"},
+     "🌿", "Meio Ambiente"),
+    ({"pesquisa","estudo","universidade","ciencia","tecnologia","descoberta"},
+     "🔬", "Ciência"),
+    ({"violencia","feminicidio","morte","assassinato","homicidio","estupro"},
+     "🚨", "Violência"),
+    ({"reforma","legislacao","camara","senado","congresso","votacao","pec"},
+     "📋", "Legislativo"),
+]
+
+def story_category(cluster):
+    """Assign a category label/emoji based on cluster token content."""
+    tokens = cluster.get("tokens", set())
+    text   = " ".join(a.title + " " + a.description for a in cluster["articles"])
+    tlow   = normalize(text)
+    tok_n  = set(re.findall(r"[a-zà-ÿç]{4,}", tlow))
+
+    for token_set, emoji, label in STORY_CATEGORIES:
+        if token_set & tok_n:
+            return emoji, label
+    return "📰", "Geral"
+
+
 # ── FOLLOW-UP SUGGESTIONS ────────────────────────────────────────
 FOLLOWUP_RULES = [
-    # (keywords_in_cluster, suggestion)
-    ({"privatiza","desestatiza","concessao","sabesp","metro","cptm"},
-     "→ Verificar DOESP: concessão/privatização → publicação formal confirmada?"),
-    ({"tarcisio","governador","governo","estado","sao paulo","paulista"},
-     "→ Cruzar com DOESP: ato publicado no diário oficial do estado?"),
-    ({"licitacao","contrato","pregao","dispensa","inexigibilidade"},
-     "→ Verificar TCE-SP e DOESP: extrato de contrato publicado?"),
-    ({"policia","policial","morte","letalidade","operacao","seguranca"},
-     "→ Ag. Mural costuma cobrir periferias; A Pública tem dados de letalidade"),
-    ({"saude","hospital","leito","sus","vacina","dengue","medicamento"},
-     "→ Fiocruz pode ter dados científicos; verificar regulação ANVISA"),
+    # SP State govt → check DOESP (only if SP state tokens present)
+    ({"privatiza","desestatiza","concessao","sabesp","cptm","metro","tarcisio","alesp","secretaria"},
+     "→ Verificar DOESP: ato publicado no Diário Oficial do Estado de SP?"),
+    ({"licitacao","contrato","pregao","dispensa","inexigibilidade","superfaturamento"},
+     "→ Verificar TCE-SP para SP, TCU para federal"),
+    # Periferias / SP social → Mural
+    ({"periferia","periferias","zona leste","zona norte","zona sul","favela","comunidade","moradores"},
+     "→ Ag. Mural cobre periferias paulistanas — verificar ângulo local"),
+    # Health → Fiocruz
+    ({"saude","doenca","epidemia","pandemia","virus","vacina","dengue"},
+     "→ Fiocruz pode ter dados científicos; verificar Secretaria de Saúde SP"),
+    # Education
     ({"escola","educacao","professor","universidade","mec","seduc"},
-     "→ Jornal USP pode ter análise acadêmica; verificar dados IBGE/INEP"),
-    ({"corrupcao","improbidade","fraude","desvio","superfaturamento"},
+     "→ Jornal USP pode ter análise acadêmica; dados IBGE/INEP disponíveis"),
+    # Corruption/investigation
+    ({"corrupcao","improbidade","fraude","desvio","investigacao","tce","tcu","mp"},
      "→ A Pública e Intercept cobrem investigativamente; dados via LAI?"),
+    # Congress / legislation with SP angle
     ({"reforma","pec","camara","senado","votacao","aprovado"},
-     "→ Impacto para SP: como vota bancada paulista? Tarcísio se posicionou?"),
-    ({"ambiental","desmatamento","clima","enchente","queimada"},
-     "→ Fiocruz e ISA têm cobertura científica; dados INPE disponíveis"),
-    ({"habitacao","moradia","sem-teto","cdhu","cohab"},
-     "→ Ag. Mural cobre periferias SP; verificar CDHU no DOESP"),
-    ({"cultural","sesc","arte","museu","teatro","patrimonio"},
-     "→ Ag. Galão cobre cultura SP; SESC Pompeia é referência"),
+     "→ Como vota bancada paulista? Impacto direto para SP?"),
+    # Environment
+    ({"ambiental","desmatamento","clima","queimada"},
+     "→ Fiocruz e INPE têm dados científicos; CETESB para SP"),
+    # Crime / violence with SP angle
+    ({"violencia","homicidio","feminicidio","crime","trafico"},
+     "→ Dados SSP-SP para crimes no estado; IBSP para estatísticas"),
 ]
+
 
 def suggest_followups(cluster, sources_covered):
     all_tokens = cluster["tokens"]
@@ -760,127 +921,168 @@ def fmt_sources(sources_with_links):
     return " · ".join(parts)
 
 def build_story_card(cluster, rank, date_str):
-    label, emoji, n_sources, has_inv, has_grande = score_story(cluster)
+    """
+    Individual story card. Format inspired by DOC-SP monitor:
+    - Header: rank + coverage label + category
+    - Headline in bold
+    - Structured fields (only when available, never empty)
+    - First sentence of context
+    - Sources as named links
+    - Follow-up suggestions if relevant
+    """
+    _, em_cov, n_sources, has_inv, has_grande = score_story(cluster)
+    cat_emoji, cat_label = story_category(cluster)
     w = extract_5w(cluster)
     rep = pick_representative(cluster)
     suggestions = suggest_followups(cluster, cluster["sources"])
 
-    # Header
+    # ── HEADER ───────────────────────────────────────────────────
+    cov_label = {1:"1 fonte",2:"2 fontes",3:"3 fontes",
+                 4:"4 fontes",5:"5 fontes"}.get(n_sources, f"{n_sources} fontes")
     lines = [
-        f"{emoji} *{label}* #{rank} - {n_sources}/{len(SOURCES)} fontes",
-        f"━━━",
+        f"{em_cov} *#{rank}* | {cat_emoji} *{cat_label}* | {cov_label}",
+        "━━━",
     ]
 
-    # 5W block
-    title_short = w["what"][:120] + ("…" if len(w["what"])>120 else "")
-    lines.append(f"📌 *{title_short}*")
-    if w["who"] and w["who"] != "-":
-        lines.append(f"👤 {w['who'][:80]}")
-    if w["where"] and w["where"] != "Brasil":
+    # ── TÍTULO ───────────────────────────────────────────────────
+    # Use full cleaned headline (not the short version) in cards
+    headline = w["what"]
+    if len(headline) > 140: headline = headline[:137] + "…"
+    lines.append(f"📌 *{headline}*")
+
+    # ── CAMPOS ESTRUTURADOS (só exibe se tiver dado real) ────────
+    # WHO — only if it's a genuine person name (not place/project)
+    if w["who"] and len(w["who"]) > 3:
+        lines.append(f"👤 {w['who']}")
+
+    # WHERE — only if different from "São Paulo" / "Brasil" defaults
+    if w["where"] and w["where"] not in ("SP","RJ","DF","Brasil"):
         lines.append(f"📍 {w['where']}")
-    lines.append(f"📅 {w['when']}")
+
+    # DATE — only show if it's a real date (not "quarta-feira")
+    if w["when"] and re.match(r"\d{2}/\d{2}/\d{4}", w["when"]):
+        lines.append(f"📅 {w['when']}")
+
+    # VALUE — always show if present
     if w["value"]:
         lines.append(f"💰 {w['value']}")
-    if w["why"] and w["why"] != "-" and len(w["why"]) > 20:
-        why_short = w["why"][:180] + ("…" if len(w["why"])>180 else "")
-        lines.append(f"💬 _{why_short}_")
 
-    # Sources with links
+    # ── CONTEXTO (primeira frase real) ───────────────────────────
+    if w["why"] and len(w["why"]) > 30:
+        lines.append(f"💬 _{w['why']}_")
+
+    # ── FONTES ───────────────────────────────────────────────────
     lines.append("━━━")
-    source_list = []
+    src_parts = []
+    seen_src  = set()
     for art in cluster["articles"]:
-        source_list.append((art.source, art.emoji, art.link))
-    # Deduplicate by source name, keep first link
-    seen_src = {}
-    for sn, se, sl in source_list:
-        if sn not in seen_src: seen_src[sn] = (se, sl)
-    src_formatted = [(sn, se, sl) for sn,(se,sl) in seen_src.items()]
-    lines.append(f"📱 {fmt_sources(src_formatted)}")
+        if art.source not in seen_src:
+            seen_src.add(art.source)
+            if art.link:
+                src_parts.append(f"[{art.emoji} {art.source}]({art.link})")
+            else:
+                src_parts.append(f"{art.emoji} {art.source}")
+        if len(src_parts) >= 5: break
+    lines.append("📱 " + " · ".join(src_parts))
 
-    # Follow-up suggestions
-    if suggestions:
+    # ── GAP + DESDOBRAMENTOS ─────────────────────────────────────
+    gaps = []
+    if n_sources >= 3 and not has_inv:
+        gaps.append("Nenhuma fonte investigativa cobriu — ângulo em aberto")
+    if n_sources == 1 and has_inv:
+        gaps.append("Só fonte especializada cobriu — grande imprensa ainda não")
+
+    if suggestions or gaps:
         lines.append("━━━")
-        lines.append("💡 *Sugestões de pauta:*")
-        for s in suggestions:
-            lines.append(s)
+        lines.append("💡 *Desdobramentos:*")
+        for g in gaps[:1]:
+            lines.append(f"  → {g}")
+        for s in suggestions[:2]:
+            lines.append(f"  {s}")
 
     return "\n".join(lines)
 
+
 def build_summary(clusters, all_articles, date_str, failed_sources):
     """
-    First message: compact header + max 6 stories synthesized to 5 words each.
-    No image previews. Links embedded per story.
+    First message: compact overview with readable headlines, max 6 stories.
+    Each line: coverage emoji + category + short headline + source count + linked icons.
     """
-    n_sources_ok = len(SOURCES) - len(failed_sources)
-    n_articles   = len(all_articles)
+    n_ok     = len(SOURCES) - len(failed_sources)
+    n_arts   = len(all_articles)
     viral    = sum(1 for c in clusters if len(c["sources"]) >= 5)
     trending = sum(1 for c in clusters if 3 <= len(c["sources"]) <= 4)
     multi    = sum(1 for c in clusters if len(c["sources"]) == 2)
     exclus   = sum(1 for c in clusters if len(c["sources"]) == 1)
 
     lines = [
-        f"📰 *MONITOR DE NOTÍCIAS - {date_str}*",
-        f"🗞️ {n_sources_ok}/{len(SOURCES)} fontes | {n_articles} pautas relevantes",
-        f"🔥 {viral} viral  \U0001f4c8 {trending} trending  \U0001f4f0 {multi} múltiplas  \U0001f50d {exclus} exclusivas",
+        f"📰 *MONITOR — {date_str}*",
+        f"🗞️ {n_ok}/{len(SOURCES)} fontes · {n_arts} pautas relevantes",
+        f"🔥 {viral} viral  📈 {trending} trending  📰 {multi} múltiplas  🔍 {exclus} exclusivas",
         "━━━",
     ]
 
-    # Max 6 stories - each synthesized to 5 words
-    top = clusters[:6]
-    for i, c in enumerate(top, 1):
+    for i, c in enumerate(clusters[:6], 1):
         _, em, n, has_inv, _ = score_story(c)
-        rep   = pick_representative(c)
-        synth = synthesize_5w(rep.title, rep.description)
-        inv   = " 💡" if has_inv else ""
-        # Up to 3 source links
+        cat_em, _            = story_category(c)
+        rep                  = pick_representative(c)
+        headline             = short_headline(rep.title, rep.description)
+        inv_flag             = " 💡" if has_inv else ""
+
+        # Source icons with links (max 4)
         src_links = []
-        seen_src  = set()
+        seen = set()
         for art in c["articles"]:
-            if art.source not in seen_src:
-                seen_src.add(art.source)
-                lnk = f"[{art.emoji}]({art.link})" if art.link else art.emoji
-                src_links.append(lnk)
-            if len(src_links) >= 3: break
-        lines.append(f"{em} *{i}.* _{synth}_ | {n}f{inv}  " + " ".join(src_links))
+            if art.source not in seen:
+                seen.add(art.source)
+                src_links.append(f"[{art.emoji}]({art.link})" if art.link else art.emoji)
+            if len(src_links) >= 4: break
+
+        lines.append(f"{em} {cat_em} *{i}.* {headline}{inv_flag} · {n}f  " + " ".join(src_links))
 
     if len(clusters) > 6:
-        lines.append(f"_+ {len(clusters) - 6} outras pautas nos cards abaixo_")
-
+        lines.append(f"_↓ mais {len(clusters)-6} pautas nos cards abaixo_")
     if failed_sources:
         lines.append("━━━")
         lines.append("⚠️ Sem resposta: " + ", ".join(failed_sources))
-
     return "\n".join(lines)
+
 
 def build_uncovered(solo_clusters, date_str):
-    """Report stories covered by only 1 source - potential exclusives."""
-    inv_solos    = [c for c in solo_clusters if c["sources"] & INVESTIGATIVE]
-    grande_solos = [c for c in solo_clusters if c["sources"] <= GRANDE_IMPRENSA]
+    """Digest of single-source stories — investigative first, then big press."""
+    inv_solos = [c for c in solo_clusters if c["sources"] & INVESTIGATIVE]
+    big_solos = [c for c in solo_clusters if c["sources"] & GRANDE_IMPRENSA
+                 and not (c["sources"] & INVESTIGATIVE)]
 
-    lines = [f"🔍 *EXCLUSIVAS & INVESTIGATIVAS - {date_str}*",
-             f"_{len(solo_clusters)} histórias em apenas 1 fonte_", "━━━"]
-
+    lines = [
+        f"🔍 *EXCLUSIVAS — {date_str}*",
+        f"_{len(inv_solos)} investigativas · {len(big_solos)} grande imprensa_",
+        "━━━",
+    ]
     if inv_solos:
-        lines.append("*🔷 Investigativas (1 fonte):*")
-        for c in inv_solos[:5]:
+        lines.append("*Investigativas / especializadas:*")
+        for c in inv_solos[:8]:
             rep = pick_representative(c)
             src = list(c["sources"])[0]
-            emo = next((s["emoji"] for s in SOURCES if s["name"]==src), "")
-            title = rep.title[:60] + ("…" if len(rep.title)>60 else "")
-            link_part = f"[{src}]({rep.link})" if rep.link else src
-            lines.append(f"  {emo} {link_part}: _{title}_")
+            emo = next((s["emoji"] for s in SOURCES if s["name"] == src), "")
+            cat_em, _ = story_category(c)
+            t = clean_headline(rep.title)[:70] + ("…" if len(rep.title) > 70 else "")
+            lnk = f"[{emo} {src}]({rep.link})" if rep.link else f"{emo} {src}"
+            lines.append(f"  {cat_em} {lnk}: _{t}_")
 
-    if grande_solos:
-        lines.append("*📰 Grande imprensa (exclusivos):*")
-        for c in grande_solos[:5]:
+    if big_solos:
+        lines.append("\n*Grande imprensa (exclusivos):*")
+        for c in big_solos[:5]:
             rep = pick_representative(c)
             src = list(c["sources"])[0]
-            emo = next((s["emoji"] for s in SOURCES if s["name"]==src), "")
-            title = rep.title[:60] + ("…" if len(rep.title)>60 else "")
-            link_part = f"[{src}]({rep.link})" if rep.link else src
-            lines.append(f"  {emo} {link_part}: _{title}_")
+            emo = next((s["emoji"] for s in SOURCES if s["name"] == src), "")
+            cat_em, _ = story_category(c)
+            t = clean_headline(rep.title)[:70] + ("…" if len(rep.title) > 70 else "")
+            lnk = f"[{emo} {src}]({rep.link})" if rep.link else f"{emo} {src}"
+            lines.append(f"  {cat_em} {lnk}: _{t}_")
 
     return "\n".join(lines)
+
 
 # ── TELEGRAM ─────────────────────────────────────────────────────
 _last_send = 0.0
