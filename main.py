@@ -1121,57 +1121,55 @@ def split_long(text, mx=3800):
 # ═══════════════════════════════════════════════════════════════════
 
 INST_SOURCES = [
-    # ── BCB — Angular SPA, Playwright intercepts internal API ────
+    # ═══ BCB — Angular SPA, multiple sections, ONE shared Playwright session ════
+    # All BCB pages follow pattern: page /foo/bar → API /api/servico/sitebcb/bar
+    # They are scraped together in _fetch_bcb_all_sections()
     {
-        "name": "BCB",
-        "full": "Banco Central do Brasil",
+        "name": "BCB", "full": "Banco Central do Brasil",
         "emoji": "🏦", "tier": "federal",
-        "url":   "https://www.bcb.gov.br/noticias",   # Playwright navigates here
-        "api":   "https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=20",
-        "fmt":   "bcb_playwright",                    # Playwright + API intercept
-        "home":  "https://www.bcb.gov.br/noticias",
+        "fmt": "bcb_playwright",
+        "home": "https://www.bcb.gov.br/noticias",
+        "sections": [
+            # (page_url, section_label, api_slug)
+            ("https://www.bcb.gov.br/noticias",
+             "Notícias", "noticias"),
+            ("https://www.bcb.gov.br/estatisticas/notaseconomicofinanceiras",
+             "Notas Econômico-Financeiras", "notaseconomicofinanceiras"),
+            ("https://www.bcb.gov.br/estatisticas/estatisticasmonetariascredito",
+             "Nota de Crédito", "estatisticasmonetariascredito"),
+            ("https://www.bcb.gov.br/politicamonetaria/copom-notas",
+             "COPOM — Notas", "copom-notas"),
+            ("https://www.bcb.gov.br/politicamonetaria/copom-atas",
+             "COPOM — Atas", "copom-atas"),
+            ("https://www.bcb.gov.br/publicacoes/focus",
+             "Focus — Expectativas", "focus"),
+            ("https://www.bcb.gov.br/regulacao/normativos",
+             "Normativos", "normativos"),
+        ],
     },
-    # ── IBGE — WordPress, use feed ───────────────────────────────
+    # ═══ IBGE — two complementary sources ═══════════════════════════════════════
     {
-        "name": "IBGE",
-        "full": "Instituto Brasileiro de Geografia e Estatística",
+        "name": "IBGE-Releases",
+        "full": "IBGE — Releases e Notas Técnicas",
+        "emoji": "📊", "tier": "federal",
+        "url":  "https://servicodados.ibge.gov.br/api/v3/noticias?tipo=release&qtd=30",
+        "rss2": "https://servicodados.ibge.gov.br/api/v3/noticias?qtd=30",
+        "fmt":  "ibge",
+        "home": "https://agenciadenoticias.ibge.gov.br/",
+    },
+    {
+        "name": "IBGE-Notícias",
+        "full": "Agência de Notícias IBGE",
         "emoji": "📊", "tier": "federal",
         "url":  "https://agenciadenoticias.ibge.gov.br/feed",
         "rss2": "https://agenciadenoticias.ibge.gov.br/?feed=rss2",
         "fmt":  "rss",
         "home": "https://agenciadenoticias.ibge.gov.br/",
     },
-    # ── gov.br Plone sites — RSS at {news-url}/RSS ──────────────
+    # ═══ CVM — news + regulatory decisions ══════════════════════════════════════
     {
-        "name": "ANVISA",
-        "full": "Agência Nacional de Vigilância Sanitária",
-        "emoji": "🏥", "tier": "federal",
-        "url":  "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa/RSS",
-        "rss2": "https://www.gov.br/anvisa/pt-br/@@rss.xml",
-        "fmt":  "rss",
-        "home": "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa",
-    },
-    {
-        "name": "ANS",
-        "full": "Agência Nacional de Saúde Suplementar",
-        "emoji": "🏥", "tier": "federal",
-        "url":  "https://www.gov.br/ans/pt-br/assuntos/noticias/RSS",
-        "rss2": "https://www.gov.br/ans/pt-br/@@rss.xml",
-        "fmt":  "rss",
-        "home": "https://www.gov.br/ans/pt-br/assuntos/noticias",
-    },
-    {
-        "name": "CADE",
-        "full": "Conselho Administrativo de Defesa Econômica",
-        "emoji": "⚖️", "tier": "federal",
-        "url":  "https://www.gov.br/cade/pt-br/assuntos/noticias/RSS",
-        "rss2": "https://www.gov.br/cade/pt-br/@@rss.xml",
-        "fmt":  "rss",
-        "home": "https://www.gov.br/cade/pt-br/assuntos/noticias",
-    },
-    {
-        "name": "CVM",
-        "full": "Comissão de Valores Mobiliários",
+        "name": "CVM-Notícias",
+        "full": "Comissão de Valores Mobiliários — Notícias",
         "emoji": "📈", "tier": "federal",
         "url":  "https://www.gov.br/cvm/pt-br/assuntos/noticias/RSS",
         "rss2": "https://www.gov.br/cvm/pt-br/@@rss.xml",
@@ -1179,69 +1177,52 @@ INST_SOURCES = [
         "home": "https://www.gov.br/cvm/pt-br/assuntos/noticias",
     },
     {
-        "name": "Receita Federal",
-        "full": "Secretaria Especial da Receita Federal do Brasil",
-        "emoji": "💼", "tier": "federal",
-        "url":  "https://www.gov.br/receitafederal/pt-br/noticias/RSS",
-        "rss2": "https://www.gov.br/receitafederal/pt-br/@@rss.xml",
+        "name": "CVM-Decisões",
+        "full": "CVM — Deliberações e Instruções",
+        "emoji": "📈", "tier": "federal",
+        "url":  "https://www.gov.br/cvm/pt-br/assuntos/noticias/deliberacoes/RSS",
+        "rss2": "https://www.gov.br/cvm/pt-br/assuntos/noticias/instrucoes/RSS",
         "fmt":  "rss",
-        "home": "https://www.gov.br/receitafederal/pt-br/noticias",
+        "home": "https://www.gov.br/cvm/pt-br/assuntos/noticias/deliberacoes",
+    },
+    # ═══ CADE — news + merger decisions ══════════════════════════════════════════
+    {
+        "name": "CADE-Notícias",
+        "full": "CADE — Notícias",
+        "emoji": "⚖️", "tier": "federal",
+        "url":  "https://www.gov.br/cade/pt-br/assuntos/noticias/RSS",
+        "rss2": "https://www.gov.br/cade/pt-br/@@rss.xml",
+        "fmt":  "rss",
+        "home": "https://www.gov.br/cade/pt-br/assuntos/noticias",
     },
     {
-        "name": "INPE",
-        "full": "Instituto Nacional de Pesquisas Espaciais",
-        "emoji": "🌿", "tier": "federal",
-        "url":  "https://www.gov.br/inpe/pt-br/assuntos/ultimas-noticias/RSS",
-        "rss2": "https://www.gov.br/inpe/pt-br/@@rss.xml",
+        "name": "CADE-Julgamentos",
+        "full": "CADE — Julgamentos e Decisões",
+        "emoji": "⚖️", "tier": "federal",
+        "url":  "https://www.gov.br/cade/pt-br/assuntos/julgamentos/RSS",
         "fmt":  "rss",
-        "home": "https://www.gov.br/inpe/pt-br/assuntos/ultimas-noticias",
+        "home": "https://www.gov.br/cade/pt-br/assuntos/julgamentos",
     },
+    # ═══ TCU — news + acórdãos ══════════════════════════════════════════════════
     {
-        "name": "IBAMA",
-        "full": "Instituto Brasileiro do Meio Ambiente",
-        "emoji": "🌿", "tier": "federal",
-        "url":  "https://www.gov.br/ibama/pt-br/noticias/RSS",
-        "rss2": "https://www.gov.br/ibama/pt-br/@@rss.xml",
-        "fmt":  "rss",
-        "home": "https://www.gov.br/ibama/pt-br/noticias",
-    },
-    {
-        "name": "ANEEL",
-        "full": "Agência Nacional de Energia Elétrica",
-        "emoji": "⚡", "tier": "federal",
-        "url":  "https://www.gov.br/aneel/pt-br/assuntos/noticias/RSS",
-        "rss2": "https://www.gov.br/aneel/pt-br/@@rss.xml",
-        "fmt":  "rss",
-        "home": "https://www.gov.br/aneel/pt-br/assuntos/noticias",
-    },
-    {
-        "name": "ANTT",
-        "full": "Agência Nacional de Transportes Terrestres",
-        "emoji": "🚛", "tier": "federal",
-        "url":  "https://www.gov.br/antt/pt-br/assuntos/noticias/RSS",
-        "rss2": "https://www.gov.br/antt/pt-br/@@rss.xml",
-        "fmt":  "rss",
-        "home": "https://www.gov.br/antt/pt-br/assuntos/noticias",
-    },
-    {
-        "name": "AGU",
-        "full": "Advocacia-Geral da União",
-        "emoji": "🏛️", "tier": "federal",
-        "url":  "https://www.gov.br/agu/pt-br/comunicacao/noticias/RSS",
-        "rss2": "https://www.gov.br/agu/pt-br/@@rss.xml",
-        "fmt":  "rss",
-        "home": "https://www.gov.br/agu/pt-br/comunicacao/noticias",
-    },
-    # ── Custom CMS ───────────────────────────────────────────────
-    {
-        "name": "TCU",
-        "full": "Tribunal de Contas da União",
+        "name": "TCU-Notícias",
+        "full": "TCU — Notícias",
         "emoji": "🔍", "tier": "federal",
         "url":  "https://portal.tcu.gov.br/imprensa/noticias/rss.xml",
         "rss2": "https://portal.tcu.gov.br/rss/tcu-noticias.rss",
         "fmt":  "rss",
         "home": "https://portal.tcu.gov.br/imprensa/noticias/",
     },
+    {
+        "name": "TCU-Acórdãos",
+        "full": "TCU — Acórdãos (decisões de auditoria)",
+        "emoji": "🔍", "tier": "federal",
+        "url":  "https://portal.tcu.gov.br/rss/tcu-acordaos-hoje.rss",
+        "rss2": "https://portal.tcu.gov.br/jurisprudencia/acordaos/rss.xml",
+        "fmt":  "rss",
+        "home": "https://portal.tcu.gov.br/jurisprudencia/acordaos/",
+    },
+    # ═══ STF + STJ ════════════════════════════════════════════════════════════════
     {
         "name": "STF",
         "full": "Supremo Tribunal Federal",
@@ -1250,35 +1231,111 @@ INST_SOURCES = [
         "fmt":  "rss",
         "home": "https://portal.stf.jus.br/noticias/",
     },
-    # ── São Paulo (estadual) — WordPress ─────────────────────────
+    {
+        "name": "STJ",
+        "full": "Superior Tribunal de Justiça",
+        "emoji": "⚖️", "tier": "federal",
+        "url":  "https://www.stj.jus.br/sites/portalp/Comunicacao/Noticias/RSS",
+        "rss2": "https://www.stj.jus.br/sites/portalp/Paginas/Comunicacao/Noticias/feed.aspx",
+        "fmt":  "rss",
+        "home": "https://www.stj.jus.br/sites/portalp/Comunicacao/Noticias",
+    },
+    # ═══ ANVISA — news + recalls ══════════════════════════════════════════════════
+    {
+        "name": "ANVISA-Notícias",
+        "full": "ANVISA — Notícias",
+        "emoji": "🏥", "tier": "federal",
+        "url":  "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa/RSS",
+        "rss2": "https://www.gov.br/anvisa/pt-br/@@rss.xml",
+        "fmt":  "rss",
+        "home": "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa",
+    },
+    {
+        "name": "ANVISA-Recalls",
+        "full": "ANVISA — Recalls e Alertas",
+        "emoji": "⚠️", "tier": "federal",
+        "url":  "https://www.gov.br/anvisa/pt-br/assuntos/recall/RSS",
+        "rss2": "https://www.gov.br/anvisa/pt-br/assuntos/alertas-e-noticias/RSS",
+        "fmt":  "rss",
+        "home": "https://www.gov.br/anvisa/pt-br/assuntos/recall",
+    },
+    # ═══ ANS / Receita / ANEEL / ANTT / AGU / INPE / IBAMA ══════════════════════
+    {
+        "name": "ANS",
+        "full": "ANS — Saúde Suplementar",
+        "emoji": "🏥", "tier": "federal",
+        "url":  "https://www.gov.br/ans/pt-br/assuntos/noticias/RSS",
+        "fmt":  "rss", "home": "https://www.gov.br/ans/pt-br/assuntos/noticias",
+    },
+    {
+        "name": "Receita Federal",
+        "full": "Receita Federal",
+        "emoji": "💼", "tier": "federal",
+        "url":  "https://www.gov.br/receitafederal/pt-br/noticias/RSS",
+        "rss2": "https://www.gov.br/receitafederal/pt-br/@@rss.xml",
+        "fmt":  "rss", "home": "https://www.gov.br/receitafederal/pt-br/noticias",
+    },
+    {
+        "name": "ANEEL",
+        "full": "ANEEL — Energia Elétrica",
+        "emoji": "⚡", "tier": "federal",
+        "url":  "https://www.gov.br/aneel/pt-br/assuntos/noticias/RSS",
+        "fmt":  "rss", "home": "https://www.gov.br/aneel/pt-br/assuntos/noticias",
+    },
+    {
+        "name": "ANTT",
+        "full": "ANTT — Transportes Terrestres",
+        "emoji": "🚛", "tier": "federal",
+        "url":  "https://www.gov.br/antt/pt-br/assuntos/noticias/RSS",
+        "fmt":  "rss", "home": "https://www.gov.br/antt/pt-br/assuntos/noticias",
+    },
+    {
+        "name": "AGU",
+        "full": "Advocacia-Geral da União",
+        "emoji": "🏛️", "tier": "federal",
+        "url":  "https://www.gov.br/agu/pt-br/comunicacao/noticias/RSS",
+        "fmt":  "rss", "home": "https://www.gov.br/agu/pt-br/comunicacao/noticias",
+    },
+    {
+        "name": "INPE",
+        "full": "INPE — Pesquisas Espaciais",
+        "emoji": "🌿", "tier": "federal",
+        "url":  "https://www.gov.br/inpe/pt-br/assuntos/ultimas-noticias/RSS",
+        "fmt":  "rss", "home": "https://www.gov.br/inpe/pt-br/assuntos/ultimas-noticias",
+    },
+    {
+        "name": "IBAMA",
+        "full": "IBAMA — Meio Ambiente",
+        "emoji": "🌿", "tier": "federal",
+        "url":  "https://www.gov.br/ibama/pt-br/noticias/RSS",
+        "fmt":  "rss", "home": "https://www.gov.br/ibama/pt-br/noticias",
+    },
+    # ═══ São Paulo ══════════════════════════════════════════════════════════════
     {
         "name": "TCE-SP",
-        "full": "Tribunal de Contas do Estado de São Paulo",
+        "full": "Tribunal de Contas do Estado de SP",
         "emoji": "🔍", "tier": "estadual",
         "url":  "https://www.tce.sp.gov.br/feed",
-        "rss2": "https://www.tce.sp.gov.br/sites/default/files/feeds/noticias.xml",
-        "fmt":  "rss",
-        "home": "https://www.tce.sp.gov.br/",
+        "fmt":  "rss", "home": "https://www.tce.sp.gov.br/",
     },
     {
         "name": "Seade",
-        "full": "Fundação Sistema Estadual de Análise de Dados",
+        "full": "Fundação Seade — Estatísticas SP",
         "emoji": "📊", "tier": "estadual",
         "url":  "https://www.seade.gov.br/wp-json/wp/v2/posts?per_page=15&orderby=date&order=desc&_fields=title,link,excerpt,date",
         "rss2": "https://www.seade.gov.br/feed/",
-        "fmt":  "wp_api",
-        "home": "https://www.seade.gov.br/noticias/",
+        "fmt":  "wp_api", "home": "https://www.seade.gov.br/noticias/",
     },
     {
         "name": "Agência SP",
-        "full": "Agência de Notícias do Governo do Estado de SP",
+        "full": "Agência de Notícias do Governo de SP",
         "emoji": "🏛️", "tier": "estadual",
         "url":  "https://www.agenciasp.sp.gov.br/wp-json/wp/v2/posts?per_page=15&orderby=date&order=desc&_fields=title,link,excerpt,date",
         "rss2": "https://www.agenciasp.sp.gov.br/feed/",
-        "fmt":  "wp_api",
-        "home": "https://www.agenciasp.sp.gov.br/",
+        "fmt":  "wp_api", "home": "https://www.agenciasp.sp.gov.br/",
     },
 ]
+
 
 # ── INSTITUTIONAL PARSERS ─────────────────────────────────────────
 
@@ -1345,7 +1402,7 @@ def fetch_institutional(source, session, hoje):
 
     # BCB needs Playwright to get cookies and intercept the internal API
     if fmt == "bcb_playwright":
-        return _fetch_bcb_playwright(source, hoje)
+        return _fetch_bcb_playwright(source, hoje)  # handles all BCB sections internally
 
     # All other sources: try URLs in order
     urls = [source.get("url",""), source.get("rss2",""), source.get("rss3","")]
@@ -1411,61 +1468,89 @@ def _parse_inst_response(r, source):
 
 def _fetch_bcb_playwright(source, hoje):
     """
-    Use Playwright to navigate BCB news page and intercept the internal API call.
-    BCB is an Angular SPA — the news list is loaded via an internal REST API.
+    Scrape ALL BCB sections in ONE shared Playwright session.
+    Each section page triggers a call to /api/servico/sitebcb/{slug}.
+    We intercept ALL these calls simultaneously.
+    Returns list of items labeled by section.
     """
-    items = []
+    sections = source.get("sections", [
+        ("https://www.bcb.gov.br/noticias", "Notícias", "noticias")
+    ])
+    all_items = []
+    api_data   = {}  # slug → list of items
+
+    def on_response(response):
+        url = response.url
+        if "api/servico/sitebcb/" in url and response.status == 200:
+            try:
+                # Extract slug from URL: .../api/servico/sitebcb/{slug}?...
+                slug = url.split("sitebcb/")[1].split("?")[0]
+                raw  = _parse_bcb(response.text())
+                if raw and slug not in api_data:
+                    api_data[slug] = raw
+            except Exception: pass
+
     try:
         from playwright.sync_api import sync_playwright
-        intercept_data = [None]
-
-        def on_response(response):
-            if "api/servico/sitebcb/noticias" in response.url and response.status == 200:
-                try:
-                    data = response.json()
-                    raw  = _parse_bcb(response.text())
-                    intercept_data[0] = raw
-                except Exception: pass
-
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True,
                 args=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"])
             ctx  = browser.new_context(user_agent=UA, locale="pt-BR")
             page = ctx.new_page()
             page.on("response", on_response)
-            page.goto(source["url"], wait_until="networkidle", timeout=25000)
-            page.wait_for_timeout(4000)
 
-            # Fallback: extract from DOM if API intercept failed
-            if not intercept_data[0]:
-                articles = []
-                for sel in ["h3.noticias-titulo a","div.noticias-card a[href*='/detalhenoticia']",
-                            ".card-noticia a",".noticia-titulo a","article a"]:
-                    els = page.query_selector_all(sel)
-                    if els:
-                        for el in els[:20]:
-                            try:
-                                title = (el.inner_text() or "").strip()
-                                href  = el.get_attribute("href") or ""
-                                if not href.startswith("http"): href = "https://www.bcb.gov.br" + href
-                                if title and len(title) > 10:
-                                    articles.append({"title":title,"desc":"","date":"","url":href,"cat":""})
-                            except: pass
-                        if articles: break
-                intercept_data[0] = articles
+            for page_url, label, api_slug in sections:
+                try:
+                    page.goto(page_url, wait_until="networkidle", timeout=20000)
+                    page.wait_for_timeout(2500)
+                    # If API intercepted, we have data; otherwise DOM fallback below
+                except Exception as e:
+                    print(f"  BCB [{label}]: {e.__class__.__name__}")
+
+            # DOM fallback for sections where API intercept missed
+            for page_url, label, api_slug in sections:
+                if api_slug in api_data:
+                    continue  # already got it via API
+                try:
+                    page.goto(page_url, wait_until="domcontentloaded", timeout=15000)
+                    page.wait_for_timeout(2000)
+                    dom_items = []
+                    for sel in ["h3.noticias-titulo a","div.card a[href*='/detalhenoticia']",
+                                ".card-noticia a",".titulo-card a","article h2 a"]:
+                        els = page.query_selector_all(sel)
+                        if els:
+                            for el in els[:10]:
+                                try:
+                                    t = (el.inner_text() or "").strip()
+                                    h = el.get_attribute("href") or ""
+                                    if not h.startswith("http"): h = "https://www.bcb.gov.br" + h
+                                    if t and len(t) > 10:
+                                        dom_items.append({"title":t,"desc":"","date":"","url":h,"cat":label})
+                                except: pass
+                            if dom_items:
+                                api_data[api_slug] = dom_items
+                                break
+                except Exception: pass
 
             ctx.close(); browser.close()
 
-        raw = intercept_data[0] or []
-        today = [i for i in raw if _item_is_today(i.get("date",""), hoje)] if raw else raw
-        print(f"  BCB (Playwright): {len(raw)} total → {len(today)} hoje ✅")
-        return today
+        # Aggregate, filter to today, label by section
+        n_total = 0
+        for page_url, label, api_slug in sections:
+            raw = api_data.get(api_slug, [])
+            if not raw: continue
+            today = [dict(i, cat=label) for i in raw if _item_is_today(i.get("date",""), hoje)]
+            all_items.extend(today)
+            n_total += len(raw)
+
+        print(f"  BCB: {n_total} total → {len(all_items)} hoje ({len(api_data)} seções) ✅")
+        return all_items
 
     except ImportError:
         print("  BCB: Playwright não disponível")
         return []
     except Exception as e:
-        print(f"  BCB Playwright err: {e}")
+        print(f"  BCB err: {e}")
         return []
 
 
@@ -1541,7 +1626,14 @@ def build_inst_message(inst_results, date_str):
             items = inst_results.get(name, [])
             if not items: continue
 
-            for item in items[:3]:  # max 3 per source
+            # Group items by section (cat field) within same institution
+            sections_seen = {}
+            for item in items:
+                cat = item.get("cat","") or ""
+                sections_seen.setdefault(cat, []).append(item)
+
+            for cat, cat_items in list(sections_seen.items())[:4]:  # max 4 sections
+              for item in cat_items[:2]:  # max 2 per section
                 title = item.get("title","").strip()
                 desc  = item.get("desc","").strip()
                 url   = item.get("url","").strip()
