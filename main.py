@@ -1114,6 +1114,458 @@ def split_long(text, mx=3800):
     if cur: parts.append(cur)
     return parts
 
+
+# ═══════════════════════════════════════════════════════════════════
+# INSTITUTIONAL SOURCES — Primary releases from gov institutions
+# Different from news: date-filtered, no clustering, own message
+# ═══════════════════════════════════════════════════════════════════
+
+INST_SOURCES = [
+    # ── BCB — Angular SPA, Playwright intercepts internal API ────
+    {
+        "name": "BCB",
+        "full": "Banco Central do Brasil",
+        "emoji": "🏦", "tier": "federal",
+        "url":   "https://www.bcb.gov.br/noticias",   # Playwright navigates here
+        "api":   "https://www.bcb.gov.br/api/servico/sitebcb/noticias?quantidade=20",
+        "fmt":   "bcb_playwright",                    # Playwright + API intercept
+        "home":  "https://www.bcb.gov.br/noticias",
+    },
+    # ── IBGE — WordPress, use feed ───────────────────────────────
+    {
+        "name": "IBGE",
+        "full": "Instituto Brasileiro de Geografia e Estatística",
+        "emoji": "📊", "tier": "federal",
+        "url":  "https://agenciadenoticias.ibge.gov.br/feed",
+        "rss2": "https://agenciadenoticias.ibge.gov.br/?feed=rss2",
+        "fmt":  "rss",
+        "home": "https://agenciadenoticias.ibge.gov.br/",
+    },
+    # ── gov.br Plone sites — RSS at {news-url}/RSS ──────────────
+    {
+        "name": "ANVISA",
+        "full": "Agência Nacional de Vigilância Sanitária",
+        "emoji": "🏥", "tier": "federal",
+        "url":  "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa/RSS",
+        "rss2": "https://www.gov.br/anvisa/pt-br/@@rss.xml",
+        "fmt":  "rss",
+        "home": "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa",
+    },
+    {
+        "name": "ANS",
+        "full": "Agência Nacional de Saúde Suplementar",
+        "emoji": "🏥", "tier": "federal",
+        "url":  "https://www.gov.br/ans/pt-br/assuntos/noticias/RSS",
+        "rss2": "https://www.gov.br/ans/pt-br/@@rss.xml",
+        "fmt":  "rss",
+        "home": "https://www.gov.br/ans/pt-br/assuntos/noticias",
+    },
+    {
+        "name": "CADE",
+        "full": "Conselho Administrativo de Defesa Econômica",
+        "emoji": "⚖️", "tier": "federal",
+        "url":  "https://www.gov.br/cade/pt-br/assuntos/noticias/RSS",
+        "rss2": "https://www.gov.br/cade/pt-br/@@rss.xml",
+        "fmt":  "rss",
+        "home": "https://www.gov.br/cade/pt-br/assuntos/noticias",
+    },
+    {
+        "name": "CVM",
+        "full": "Comissão de Valores Mobiliários",
+        "emoji": "📈", "tier": "federal",
+        "url":  "https://www.gov.br/cvm/pt-br/assuntos/noticias/RSS",
+        "rss2": "https://www.gov.br/cvm/pt-br/@@rss.xml",
+        "fmt":  "rss",
+        "home": "https://www.gov.br/cvm/pt-br/assuntos/noticias",
+    },
+    {
+        "name": "Receita Federal",
+        "full": "Secretaria Especial da Receita Federal do Brasil",
+        "emoji": "💼", "tier": "federal",
+        "url":  "https://www.gov.br/receitafederal/pt-br/noticias/RSS",
+        "rss2": "https://www.gov.br/receitafederal/pt-br/@@rss.xml",
+        "fmt":  "rss",
+        "home": "https://www.gov.br/receitafederal/pt-br/noticias",
+    },
+    {
+        "name": "INPE",
+        "full": "Instituto Nacional de Pesquisas Espaciais",
+        "emoji": "🌿", "tier": "federal",
+        "url":  "https://www.gov.br/inpe/pt-br/assuntos/ultimas-noticias/RSS",
+        "rss2": "https://www.gov.br/inpe/pt-br/@@rss.xml",
+        "fmt":  "rss",
+        "home": "https://www.gov.br/inpe/pt-br/assuntos/ultimas-noticias",
+    },
+    {
+        "name": "IBAMA",
+        "full": "Instituto Brasileiro do Meio Ambiente",
+        "emoji": "🌿", "tier": "federal",
+        "url":  "https://www.gov.br/ibama/pt-br/noticias/RSS",
+        "rss2": "https://www.gov.br/ibama/pt-br/@@rss.xml",
+        "fmt":  "rss",
+        "home": "https://www.gov.br/ibama/pt-br/noticias",
+    },
+    {
+        "name": "ANEEL",
+        "full": "Agência Nacional de Energia Elétrica",
+        "emoji": "⚡", "tier": "federal",
+        "url":  "https://www.gov.br/aneel/pt-br/assuntos/noticias/RSS",
+        "rss2": "https://www.gov.br/aneel/pt-br/@@rss.xml",
+        "fmt":  "rss",
+        "home": "https://www.gov.br/aneel/pt-br/assuntos/noticias",
+    },
+    {
+        "name": "ANTT",
+        "full": "Agência Nacional de Transportes Terrestres",
+        "emoji": "🚛", "tier": "federal",
+        "url":  "https://www.gov.br/antt/pt-br/assuntos/noticias/RSS",
+        "rss2": "https://www.gov.br/antt/pt-br/@@rss.xml",
+        "fmt":  "rss",
+        "home": "https://www.gov.br/antt/pt-br/assuntos/noticias",
+    },
+    {
+        "name": "AGU",
+        "full": "Advocacia-Geral da União",
+        "emoji": "🏛️", "tier": "federal",
+        "url":  "https://www.gov.br/agu/pt-br/comunicacao/noticias/RSS",
+        "rss2": "https://www.gov.br/agu/pt-br/@@rss.xml",
+        "fmt":  "rss",
+        "home": "https://www.gov.br/agu/pt-br/comunicacao/noticias",
+    },
+    # ── Custom CMS ───────────────────────────────────────────────
+    {
+        "name": "TCU",
+        "full": "Tribunal de Contas da União",
+        "emoji": "🔍", "tier": "federal",
+        "url":  "https://portal.tcu.gov.br/imprensa/noticias/rss.xml",
+        "rss2": "https://portal.tcu.gov.br/rss/tcu-noticias.rss",
+        "fmt":  "rss",
+        "home": "https://portal.tcu.gov.br/imprensa/noticias/",
+    },
+    {
+        "name": "STF",
+        "full": "Supremo Tribunal Federal",
+        "emoji": "⚖️", "tier": "federal",
+        "url":  "https://portal.stf.jus.br/noticias/rss.asp",
+        "fmt":  "rss",
+        "home": "https://portal.stf.jus.br/noticias/",
+    },
+    # ── São Paulo (estadual) — WordPress ─────────────────────────
+    {
+        "name": "TCE-SP",
+        "full": "Tribunal de Contas do Estado de São Paulo",
+        "emoji": "🔍", "tier": "estadual",
+        "url":  "https://www.tce.sp.gov.br/feed",
+        "rss2": "https://www.tce.sp.gov.br/sites/default/files/feeds/noticias.xml",
+        "fmt":  "rss",
+        "home": "https://www.tce.sp.gov.br/",
+    },
+    {
+        "name": "Seade",
+        "full": "Fundação Sistema Estadual de Análise de Dados",
+        "emoji": "📊", "tier": "estadual",
+        "url":  "https://www.seade.gov.br/wp-json/wp/v2/posts?per_page=15&orderby=date&order=desc&_fields=title,link,excerpt,date",
+        "rss2": "https://www.seade.gov.br/feed/",
+        "fmt":  "wp_api",
+        "home": "https://www.seade.gov.br/noticias/",
+    },
+    {
+        "name": "Agência SP",
+        "full": "Agência de Notícias do Governo do Estado de SP",
+        "emoji": "🏛️", "tier": "estadual",
+        "url":  "https://www.agenciasp.sp.gov.br/wp-json/wp/v2/posts?per_page=15&orderby=date&order=desc&_fields=title,link,excerpt,date",
+        "rss2": "https://www.agenciasp.sp.gov.br/feed/",
+        "fmt":  "wp_api",
+        "home": "https://www.agenciasp.sp.gov.br/",
+    },
+]
+
+# ── INSTITUTIONAL PARSERS ─────────────────────────────────────────
+
+def _parse_bcb(text):
+    """BCB API: {value: [{Titulo, Resumo, DataPublicacao, Url, Categoria}]}"""
+    items = []
+    try:
+        data = json.loads(text)
+        raw = data.get("value") or data.get("conteudo") or []
+        if isinstance(data, list): raw = data
+        for item in raw:
+            title = item.get("Titulo","") or item.get("titulo","")
+            desc  = item.get("Resumo","") or item.get("resumo","") or item.get("Introducao","")
+            date  = item.get("DataPublicacao","") or item.get("dataPublicacao","")
+            url   = item.get("Url","") or item.get("url","") or item.get("Link","")
+            cat   = item.get("Categoria","") or item.get("categoria","")
+            if url and not url.startswith("http"):
+                url = "https://www.bcb.gov.br" + url
+            if title: items.append({"title":title,"desc":clean_html(desc),"date":date,"url":url,"cat":cat})
+    except (json.JSONDecodeError, KeyError, TypeError): pass
+    return items
+
+def _parse_ibge(text):
+    """IBGE API: [{id, tipo, titulo, introducao, data_publicacao, link}]"""
+    items = []
+    try:
+        raw = json.loads(text)
+        if isinstance(raw, dict): raw = raw.get("items") or raw.get("data") or []
+        for item in raw:
+            title = item.get("titulo","") or item.get("title","")
+            desc  = item.get("introducao","") or item.get("summary","")
+            date  = item.get("data_publicacao","") or item.get("data","") or ""
+            url   = item.get("link","") or item.get("url","")
+            tipo  = item.get("tipo","") or item.get("type","")
+            if not url and item.get("id"):
+                url = f"https://agenciadenoticias.ibge.gov.br/agencia-noticias/2012-agencia-de-noticias/noticias/{item['id']}"
+            if title: items.append({"title":title,"desc":clean_html(desc),"date":date,"url":url,"cat":tipo})
+    except (json.JSONDecodeError, KeyError, TypeError): pass
+    return items
+
+def _parse_plone_rss(text):
+    """Plone @@rss.xml — standard Atom/RSS used by gov.br sites."""
+    return _parse_xml_feed(text.encode() if isinstance(text,str) else text, "", "")
+
+def _item_is_today(date_str, hoje):
+    """Check if a date string refers to today."""
+    if not date_str: return True  # assume today if no date
+    d = parse_date_br(date_str)
+    if d and d[:10] == hoje.strftime("%d/%m/%Y")[:10]: return True
+    # Some APIs return "28/05/2026 09:00:00"
+    if d and hoje.strftime("%d/%m") in d: return True
+    return False
+
+def fetch_institutional(source, session, hoje):
+    """
+    Fetch a single institutional source.
+    Strategy by fmt:
+      - rss / wp_api: direct HTTP with session
+      - bcb_playwright: Playwright navigates to BCB, intercepts internal API
+    Returns list of today's items [{title, desc, date, url, cat}].
+    """
+    name  = source["name"]
+    fmt   = source.get("fmt","rss")
+
+    # BCB needs Playwright to get cookies and intercept the internal API
+    if fmt == "bcb_playwright":
+        return _fetch_bcb_playwright(source, hoje)
+
+    # All other sources: try URLs in order
+    urls = [source.get("url",""), source.get("rss2",""), source.get("rss3","")]
+    urls = [u for u in urls if u]
+
+    for url in urls:
+        try:
+            r = session.get(url, timeout=15)
+            if r.status_code != 200:
+                print(f"  {name}: HTTP {r.status_code}  [{url[-45:]}]")
+                continue
+            raw = _parse_inst_response(r, source)
+            if raw:
+                today = [i for i in raw if _item_is_today(i.get("date",""), hoje)]
+                # If nothing today but very early morning, allow yesterday too
+                if not today:
+                    import datetime as _dt
+                    yesterday = hoje - _dt.timedelta(days=1)
+                    today = [i for i in raw if _item_is_today(i.get("date",""), yesterday)]
+                    if today: print(f"  {name}: {len(today)} de ontem (tolerância horária)")
+                print(f"  {name}: {len(raw)} total → {len(today)} hoje ✅")
+                return today
+            else:
+                print(f"  {name}: 200 mas 0 itens  [{url[-45:]}]")
+        except Exception as e:
+            print(f"  {name}: {e.__class__.__name__}: {str(e)[:50]}")
+
+    # Playwright fallback
+    return _fetch_inst_playwright(source, hoje)
+
+
+def _parse_inst_response(r, source):
+    """Parse institutional HTTP response — RSS/Atom, WP API, Plone RSS, or JSON."""
+    fmt  = source.get("fmt","rss")
+    text = r.text
+    body = r.content
+
+    # WordPress REST API
+    if fmt == "wp_api" or "/wp-json/" in r.url:
+        arts = _parse_wp_api(text, source["name"], source["emoji"])
+        return [{"title":a.title,"desc":a.description,"date":a.pub_date,"url":a.link,"cat":""} for a in arts]
+
+    # BCB JSON
+    if fmt == "bcb":
+        return _parse_bcb(text)
+
+    # IBGE JSON
+    if fmt == "ibge":
+        return _parse_ibge(text)
+
+    # RSS / Atom (default — covers Plone RSS, standard RSS, Atom)
+    arts = _parse_xml_feed(body, source["name"], source["emoji"])
+    if arts:
+        return [{"title":a.title,"desc":a.description,"date":a.pub_date,"url":a.link,"cat":""} for a in arts]
+
+    # HTML fallback
+    if "<html" in text.lower()[:200]:
+        arts = _parse_html_feed(text, source["name"], source["emoji"])
+        return [{"title":a.title,"desc":a.description,"date":a.pub_date,"url":a.link,"cat":""} for a in arts]
+
+    return []
+
+
+def _fetch_bcb_playwright(source, hoje):
+    """
+    Use Playwright to navigate BCB news page and intercept the internal API call.
+    BCB is an Angular SPA — the news list is loaded via an internal REST API.
+    """
+    items = []
+    try:
+        from playwright.sync_api import sync_playwright
+        intercept_data = [None]
+
+        def on_response(response):
+            if "api/servico/sitebcb/noticias" in response.url and response.status == 200:
+                try:
+                    data = response.json()
+                    raw  = _parse_bcb(response.text())
+                    intercept_data[0] = raw
+                except Exception: pass
+
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True,
+                args=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"])
+            ctx  = browser.new_context(user_agent=UA, locale="pt-BR")
+            page = ctx.new_page()
+            page.on("response", on_response)
+            page.goto(source["url"], wait_until="networkidle", timeout=25000)
+            page.wait_for_timeout(4000)
+
+            # Fallback: extract from DOM if API intercept failed
+            if not intercept_data[0]:
+                articles = []
+                for sel in ["h3.noticias-titulo a","div.noticias-card a[href*='/detalhenoticia']",
+                            ".card-noticia a",".noticia-titulo a","article a"]:
+                    els = page.query_selector_all(sel)
+                    if els:
+                        for el in els[:20]:
+                            try:
+                                title = (el.inner_text() or "").strip()
+                                href  = el.get_attribute("href") or ""
+                                if not href.startswith("http"): href = "https://www.bcb.gov.br" + href
+                                if title and len(title) > 10:
+                                    articles.append({"title":title,"desc":"","date":"","url":href,"cat":""})
+                            except: pass
+                        if articles: break
+                intercept_data[0] = articles
+
+            ctx.close(); browser.close()
+
+        raw = intercept_data[0] or []
+        today = [i for i in raw if _item_is_today(i.get("date",""), hoje)] if raw else raw
+        print(f"  BCB (Playwright): {len(raw)} total → {len(today)} hoje ✅")
+        return today
+
+    except ImportError:
+        print("  BCB: Playwright não disponível")
+        return []
+    except Exception as e:
+        print(f"  BCB Playwright err: {e}")
+        return []
+
+
+def _fetch_inst_playwright(source, hoje):
+    """Generic Playwright fallback for institutional sites."""
+    items = []
+    try:
+        from playwright.sync_api import sync_playwright
+        from urllib.parse import urljoin
+
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True,
+                args=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"])
+            ctx  = browser.new_context(user_agent=UA, locale="pt-BR")
+            page = ctx.new_page()
+            page.goto(source.get("home", source.get("url","")),
+                      wait_until="domcontentloaded", timeout=20000)
+            page.wait_for_timeout(3000)
+
+            for sel in ["article a h2","article h2","h2.titulo",".noticia a",
+                        ".summary-title a",".tile-summary h2",".list-item h3",
+                        "h3.entry-title","h2.post-title","a h2","a h3"]:
+                els = page.query_selector_all(sel)
+                if els:
+                    for el in els[:15]:
+                        try:
+                            title = (el.inner_text() or "").strip()
+                            parent = el.evaluate_handle("el => el.closest('a')")
+                            href = (parent.get_attribute("href") or "") if parent else ""
+                            if not href.startswith("http"): href = urljoin(source.get("home",""), href)
+                            if title and len(title) > 15:
+                                items.append({"title":title,"desc":"","date":"","url":href,"cat":""})
+                        except: pass
+                    if items: break
+
+            ctx.close(); browser.close()
+
+        today = [i for i in items if _item_is_today(i.get("date",""), hoje)]
+        if items:
+            print(f"  {source['name']} (PW fallback): {len(items)} total → {len(today)} hoje")
+        return today
+
+    except Exception as e:
+        print(f"  {source['name']} PW fallback err: {e}")
+        return []
+
+
+def build_inst_message(inst_results, date_str):
+    """
+    Build the institutional releases Telegram message.
+    Format: one block per institution, clean title + context + link.
+    """
+    total = sum(len(v) for v in inst_results.values())
+    if total == 0:
+        return ""
+
+    lines = [
+        f"🏛️ *FONTES INSTITUCIONAIS — {date_str}*",
+        f"_{total} publicações hoje_",
+        "━━━",
+    ]
+
+    # Group by tier: federal first, then estadual
+    for tier_label, tier in [("Federal", "federal"), ("São Paulo", "estadual")]:
+        tier_sources = [s for s in INST_SOURCES if s.get("tier") == tier
+                        and inst_results.get(s["name"])]
+        if not tier_sources: continue
+
+        lines.append(f"*{tier_label}:*")
+        for src in tier_sources:
+            name  = src["name"]
+            emoji = src["emoji"]
+            items = inst_results.get(name, [])
+            if not items: continue
+
+            for item in items[:3]:  # max 3 per source
+                title = item.get("title","").strip()
+                desc  = item.get("desc","").strip()
+                url   = item.get("url","").strip()
+                cat   = item.get("cat","")
+
+                # Clean title
+                title = clean_headline(title)[:100]
+                if cat: title = f"[{cat}] {title}"
+
+                # Context: first sentence only
+                ctx = ""
+                if desc:
+                    fse = desc.find(". ")
+                    ctx = (desc[:fse+1] if 20 < fse < 160 else desc[:120]).strip()
+
+                lnk = f"[{emoji} {name}]({url})" if url else f"{emoji} {name}"
+                lines.append(f"  {lnk}: *{title}*")
+                if ctx: lines.append(f"  _{ctx}_")
+
+        lines.append("")  # spacing
+
+    return "\n".join(lines).strip()
+
+
 # ── MAIN ─────────────────────────────────────────────────────────
 def main():
     now      = datetime.datetime.now(datetime.timezone.utc).astimezone(
@@ -1122,6 +1574,16 @@ def main():
     time_str = now.strftime("%H:%M")
     run_str  = f"{date_str} {time_str}"
     print(f"=== Monitor de Notícias v1.0 - {run_str} BRT ===\n")
+
+    # 0. Fetch institutional sources (date-filtered, separate message)
+    print("\n  Fontes institucionais...")
+    inst_session = requests.Session()
+    inst_session.headers.update({"User-Agent": UA, "Accept": "*/*", "Accept-Language": "pt-BR,pt;q=0.9"})
+    inst_results = {}
+    _hoje_date = now.date()
+    for isrc in INST_SOURCES:
+        releases = fetch_institutional(isrc, inst_session, _hoje_date)
+        inst_results[isrc["name"]] = releases
 
     # 1. Fetch all sources in parallel (max 6 workers)
     # Playwright sources are serialised inside fetch_rss to share browser
@@ -1195,6 +1657,12 @@ def main():
             send_telegram(part, silent=True)
 
     print(f"\n  Done. {sent} fichas enviadas.")
+
+    # Institutional releases (separate message, silent)
+    inst_msg = build_inst_message(inst_results, run_str)
+    if inst_msg:
+        for part in split_long(inst_msg):
+            send_telegram(part, silent=False)
 
 if __name__ == "__main__":
     main()
