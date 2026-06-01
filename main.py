@@ -984,6 +984,61 @@ FOLLOWUP_RULES = [
 ]
 
 
+
+# ── CIVIC IMPACT (Kovach Ch.8 — why this matters to citizens) ────
+_CIVIC_IMPACT = {
+    "investigativo": "🔎 Possível desvio de dinheiro público",
+    "privatizacao":  "🏭 Mudança em serviço público — pode afetar tarifas e acesso",
+    "fiscal":        "💸 Impacto no erário — afeta investimentos em saúde e educação",
+    "saude":         "🏥 Impacta acesso a serviços de saúde da população",
+    "educacao":      "🎓 Afeta qualidade e acesso à educação pública",
+    "seguranca":     "🚔 Envolve riscos à segurança da população",
+    "obras":         "🏗️ Obra pública com recursos de impostos",
+    "meio_ambiente": "🌿 Consequências para o meio ambiente e qualidade de vida",
+    "disciplinar":   "⚖️ Responsabilização de servidor público",
+    "legal":         "🏛️ Decisão com impacto nos direitos dos cidadãos",
+    "licitacao":     "🛒 Processo que define quem presta serviços ao governo",
+    "contrato":      "📝 Compromisso financeiro do Estado com empresa privada",
+    "urgencia":      "🚨 Contratação sem licitação — exige justificativa pública",
+    "politica":      "🏛️ Decisão que afeta as estruturas de representação política",
+    "economia":      "💰 Impacto econômico para empresas e trabalhadores",
+}
+_CIVIC_ACTIONS = {
+    "investigativo": "→ Pedido LAI pode revelar documentos completos",
+    "privatizacao":  "→ Contrato completo: DOESP ou portal de transparência",
+    "saude":         "→ Contratos de OS de saúde: verificar DOESP caderno Gestão",
+    "obras":         "→ Licitação e contrato: DOESP ou e-negócios",
+    "contrato":      "→ Extrato + CNPJ: DOESP ou portal de contratações",
+    "licitacao":     "→ Edital completo: DOESP ou comprasnet",
+    "disciplinar":   "→ Processo: verificar DOESP caderno Pessoal",
+    "legal":         "→ Inteiro teor: portal do tribunal respectivo",
+    "fiscal":        "→ Portal da Transparência federal/estadual",
+}
+
+def civic_impact(category):
+    """Kovach Ch.8: why this story matters to the citizen."""
+    return _CIVIC_IMPACT.get(category, "")
+
+def civic_action(category):
+    """Kovach Ch.10: what the citizen can do — specific tool."""
+    return _CIVIC_ACTIONS.get(category, "")
+
+def source_independence(cluster):
+    """
+    Kovach Ch.5: flag when all sources are from the same faction.
+    Verification requires multiple independent witnesses.
+    """
+    sources = cluster["sources"]
+    inv     = sources & INVESTIGATIVE_PLUS
+    grande  = sources & MAINSTREAM
+    n       = len(sources)
+    if n >= 2:
+        if not inv:
+            return "_📰 Apenas grande imprensa — ângulo investigativo em aberto_"
+        if not grande:
+            return "_💡 Apenas fontes investigativas — grande imprensa não confirmou_"
+    return None
+
 def suggest_followups(cluster, sources_covered):
     all_tokens = cluster["tokens"]
     suggestions = []
@@ -1049,9 +1104,11 @@ def build_story_card(cluster, rank, date_str):
     if w["value"]:  lines.append(f"💰 {w['value']}")
 
     # ── CONTEXT: first sentence only (distillation, not dump) ──
-    if w["context"] and len(w["context"]) > 25:
-        ctx = w["context"][:160] + ("…" if len(w["context"])>160 else "")
-        lines.append(f"💬 _{ctx}_")
+    if w.get("context") or w.get("why"):
+        ctx_text = w.get("context") or w.get("why","")
+        if len(ctx_text) > 25:
+            ctx = ctx_text[:160] + ("…" if len(ctx_text)>160 else "")
+            lines.append(f"💬 _{ctx}_")
 
     # ── WHY IT MATTERS: civic impact (Kovach Ch.8 — relevant to citizens) ──
     if impact:
@@ -1289,8 +1346,8 @@ INST_SOURCES = [
         "name": "CADE-Notícias",
         "full": "CADE — Notícias",
         "emoji": "⚖️", "tier": "federal",
-        "url":  "https://www.gov.br/cade/pt-br/assuntos/noticias/RSS",
-        "rss2": "https://www.gov.br/cade/pt-br/@@rss.xml",
+        "url":  "https://www.gov.br/cade/pt-br/@@rss.xml",
+        "rss2": "https://www.gov.br/cade/pt-br/assuntos/noticias/RSS",
         "fmt":  "rss",
         "home": "https://www.gov.br/cade/pt-br/assuntos/noticias",
     },
@@ -1298,8 +1355,8 @@ INST_SOURCES = [
         "name": "CADE-Julgamentos",
         "full": "CADE — Julgamentos e Decisões",
         "emoji": "⚖️", "tier": "federal",
-        "url":  "https://www.gov.br/cade/pt-br/assuntos/julgamentos/RSS",
-        "rss2": "https://www.gov.br/cade/pt-br/assuntos/noticias/notas/RSS",
+        "url":  "https://www.gov.br/cade/pt-br/@@rss.xml",
+        "rss2": "https://www.gov.br/cade/pt-br/assuntos/noticias/RSS",
         "fmt":  "rss",
         "home": "https://www.gov.br/cade/pt-br/assuntos/julgamentos",
     },
@@ -1310,9 +1367,8 @@ INST_SOURCES = [
         "emoji": "🔍", "tier": "federal",
         # TCU news confirmed at portal.tcu.gov.br/imprensa/noticias
         # RSS endpoint tested from GitHub Actions
-        "url":  "https://portal.tcu.gov.br/rss/tcu-noticias.rss",
-        "rss2": "https://portal.tcu.gov.br/imprensa/noticias/RSS",
-        "rss3": "https://portal.tcu.gov.br/imprensa/noticias/rss",
+        "url":  "https://portal.tcu.gov.br/imprensa/noticias/rss",
+        "rss2": "https://portal.tcu.gov.br/rss/tcu-noticias.rss",
         "fmt":  "rss",
         "home": "https://portal.tcu.gov.br/imprensa/noticias",
     },
@@ -1322,8 +1378,7 @@ INST_SOURCES = [
         "emoji": "🔍", "tier": "federal",
         # TCU has a documented JSON webservice for acórdãos:
         # https://sites.tcu.gov.br/dados-abertos/webservices-tcu/
-        "url":  "https://pesquisa.apps.tcu.gov.br/rest/acordao/ACORDAO?q=*&sort=dataSessionAnterior%2Cdesc&size=20",
-        "rss2": "https://portal.tcu.gov.br/rss/tcu-acordaos-hoje.rss",
+        "url":  "https://portal.tcu.gov.br/rss/tcu-acordaos-hoje.rss",
         "fmt":  "tcu_json",
         "home": "https://portal.tcu.gov.br/jurisprudencia/acordaos/",
     },
@@ -1332,7 +1387,8 @@ INST_SOURCES = [
         "name": "STF",
         "full": "Supremo Tribunal Federal",
         "emoji": "⚖️", "tier": "federal",
-        "url":  "https://portal.stf.jus.br/noticias/rss.asp",
+        "url":  "https://noticias.stf.jus.br/feed/",
+        "rss2": "https://portal.stf.jus.br/noticias/rss.asp",
         "fmt":  "rss",
         "home": "https://portal.stf.jus.br/noticias/",
     },
@@ -1341,8 +1397,7 @@ INST_SOURCES = [
         "full": "Superior Tribunal de Justiça",
         "emoji": "⚖️", "tier": "federal",
         "url":  "https://www.stj.jus.br/sites/portalp/Comunicacao/Noticias/RSS",
-        "rss2": "https://www.stj.jus.br/sites/portalp/Comunicacao/Noticias/feed.aspx",
-        "rss3": "https://www.stj.jus.br/portaldestaque/rssnoticias.asp",
+        "rss2": "https://www.stj.jus.br/portaldestaque/rssnoticias.asp",
         "fmt":  "rss",
         "home": "https://www.stj.jus.br/sites/portalp/Comunicacao/Noticias",
     },
@@ -1351,8 +1406,8 @@ INST_SOURCES = [
         "name": "ANVISA-Notícias",
         "full": "ANVISA — Notícias",
         "emoji": "🏥", "tier": "federal",
-        "url":  "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa/RSS",
-        "rss2": "https://www.gov.br/anvisa/pt-br/@@rss.xml",
+        "url":  "https://www.gov.br/anvisa/pt-br/@@rss.xml",
+        "rss2": "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa/RSS",
         "fmt":  "rss",
         "home": "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa",
     },
@@ -1360,9 +1415,8 @@ INST_SOURCES = [
         "name": "ANVISA-Recalls",
         "full": "ANVISA — Recalls e Alertas",
         "emoji": "⚠️", "tier": "federal",
-        "url":  "https://www.gov.br/anvisa/pt-br/assuntos/recall/RSS",
-        "rss2": "https://www.gov.br/anvisa/pt-br/assuntos/alertas-e-noticias/RSS",
-        "rss3": "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa/@@rss.xml",
+        "url":  "https://www.gov.br/anvisa/pt-br/@@rss.xml",
+        "rss2": "https://www.gov.br/anvisa/pt-br/assuntos/recall/RSS",
         "fmt":  "rss",
         "home": "https://www.gov.br/anvisa/pt-br/assuntos/recall",
     },
@@ -1386,35 +1440,40 @@ INST_SOURCES = [
         "name": "ANEEL",
         "full": "ANEEL — Energia Elétrica",
         "emoji": "⚡", "tier": "federal",
-        "url":  "https://www.gov.br/aneel/pt-br/assuntos/noticias/RSS",
+        "url":  "https://www.gov.br/aneel/pt-br/@@rss.xml",
+        "rss2": "https://www.gov.br/aneel/pt-br/assuntos/noticias/RSS",
         "fmt":  "rss", "home": "https://www.gov.br/aneel/pt-br/assuntos/noticias",
     },
     {
         "name": "ANTT",
         "full": "ANTT — Transportes Terrestres",
         "emoji": "🚛", "tier": "federal",
-        "url":  "https://www.gov.br/antt/pt-br/assuntos/noticias/RSS",
+        "url":  "https://www.gov.br/antt/pt-br/@@rss.xml",
+        "rss2": "https://www.gov.br/antt/pt-br/assuntos/noticias/RSS",
         "fmt":  "rss", "home": "https://www.gov.br/antt/pt-br/assuntos/noticias",
     },
     {
         "name": "AGU",
         "full": "Advocacia-Geral da União",
         "emoji": "🏛️", "tier": "federal",
-        "url":  "https://www.gov.br/agu/pt-br/comunicacao/noticias/RSS",
+        "url":  "https://www.gov.br/agu/pt-br/@@rss.xml",
+        "rss2": "https://www.gov.br/agu/pt-br/comunicacao/noticias/RSS",
         "fmt":  "rss", "home": "https://www.gov.br/agu/pt-br/comunicacao/noticias",
     },
     {
         "name": "INPE",
         "full": "INPE — Pesquisas Espaciais",
         "emoji": "🌿", "tier": "federal",
-        "url":  "https://www.gov.br/inpe/pt-br/assuntos/ultimas-noticias/RSS",
+        "url":  "https://www.gov.br/inpe/pt-br/@@rss.xml",
+        "rss2": "https://www.gov.br/inpe/pt-br/assuntos/ultimas-noticias/RSS",
         "fmt":  "rss", "home": "https://www.gov.br/inpe/pt-br/assuntos/ultimas-noticias",
     },
     {
         "name": "IBAMA",
         "full": "IBAMA — Meio Ambiente",
         "emoji": "🌿", "tier": "federal",
-        "url":  "https://www.gov.br/ibama/pt-br/noticias/RSS",
+        "url":  "https://www.gov.br/ibama/pt-br/@@rss.xml",
+        "rss2": "https://www.gov.br/ibama/pt-br/noticias/RSS",
         "fmt":  "rss", "home": "https://www.gov.br/ibama/pt-br/noticias",
     },
     # ═══ São Paulo ══════════════════════════════════════════════════════════════
@@ -1422,15 +1481,16 @@ INST_SOURCES = [
         "name": "TCE-SP",
         "full": "Tribunal de Contas do Estado de SP",
         "emoji": "🔍", "tier": "estadual",
-        "url":  "https://www.tce.sp.gov.br/feed",
+        "url":  "https://www.tce.sp.gov.br/?feed=rss2",
+        "rss2": "https://www.tce.sp.gov.br/feed",
         "fmt":  "rss", "home": "https://www.tce.sp.gov.br/",
     },
     {
         "name": "Seade",
         "full": "Fundação Seade — Estatísticas SP",
         "emoji": "📊", "tier": "estadual",
-        "url":  "https://www.seade.gov.br/wp-json/wp/v2/posts?per_page=15&orderby=date&order=desc&_fields=title,link,excerpt,date",
-        "rss2": "https://www.seade.gov.br/feed/",
+        "url":  "https://www.seade.gov.br/feed/",
+        "rss2": "https://www.seade.gov.br/?feed=rss2",
         "fmt":  "wp_api", "home": "https://www.seade.gov.br/noticias/",
     },
     {
