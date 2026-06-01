@@ -144,6 +144,44 @@ _BLOCK_TOKENS = {
     "ingresso","turnê","show","concerto",  # entertainment events
 }
 
+# Sports tokens — any 1+ triggers the sports check
+_SPORTS_TOKENS = {
+    # Sports & competitions
+    "futebol","basquete","volei","natacao","atletismo","ciclismo","tenis",
+    "gol","placar","rodada","tabela","campeonato","copa","olimpiada",
+    "olimpico","olimpicos","paralimpico","semifinal","quartas","titulo",
+    "final","torneio","partida","torcida","estadio","arena","liga","esporte",
+    # Athletes / teams
+    "jogador","atleta","tecnico","treinador","escalacao","elenco",
+    "transferencia","renovacao",  # player-specific contracts/transfers
+    # Clubs (most common Brazilian ones)
+    "palmeiras","flamengo","corinthians","santos","atletico","gremio",
+    "fluminense","vasco","botafogo","internacional","cruzeiro","bahia",
+    "sao paulo","sport","celta","galvao","neymar","mbappé","mbappe",
+}
+
+# Institutional signals that OVERRIDE the sports block
+# If any of these appear alongside sports → keep (political sports angle)
+_INSTITUTIONAL_SPORTS = {
+    "corrupcao","propina","lavagem","fraude","desvio","superfaturamento",
+    "licitacao","verba","publica","erario","fundo","repasse","recurso",
+    "cpi","cpis","tcu","ministerio","senado","camara","governador","prefeito",
+    "governadora","prefeitura","deputado","deputados","senador","senadores",
+    "policia","federal","ministerio","publico","delegado","investigacao",
+    "apuracao","prisao","preso","presa","condenado","condenados",
+    "stf","stj","pgr","regulacao","legislacao","regulamentacao",
+    "cbf","conmebol","anfp","cob","esporte","antidoping","doping",
+    "fraude","escandalo","corrupto",
+    # Betting/gambling manipulation — always political/criminal context
+    "manipulacao","manipulado","viciado","fixacao","combinado",
+    "apostas","bicheiro","jogo ilegal","lavagem",
+}
+
+# Also check title text directly for 3-char acronyms that regex misses
+_SHORT_INST_SIGNALS = {"cpi","tcu","stf","stj","pgr","pf","mpf","cvm","bcb",
+                       "cob","cbf","can","van","onu"}
+
+
 # Hard-block phrases that always mean celebrity content
 _BLOCK_HARD_PHRASES = [
     "anuncia show", "anuncia turnê", "anuncia tour", "venda de ingressos",
@@ -195,27 +233,39 @@ def is_relevant(article):
     for phrase in _BLOCK_HARD_PHRASES:
         if normalize(phrase) in combined:
             return False
-    # Legacy block phrases
     for phrase in _BLOCK_PHRASES:
         if normalize(phrase) in combined:
             return False
 
-    # If mostly blocked tokens → skip
-    blocked_hits = len(tokens & _BLOCK_TOKENS)
-    keep_hits    = len(tokens & _KEEP_TOKENS)
+    blocked_hits      = len(tokens & _BLOCK_TOKENS)
+    keep_hits         = len(tokens & _KEEP_TOKENS)
+    sports_hits       = len(tokens & _SPORTS_TOKENS)
+    institutional_hits= len(tokens & _INSTITUTIONAL_SPORTS)
 
+    # Sports filter — block unless institutional/political angle present
+    has_brazil = bool(tokens & _BRAZIL_TOKENS)
+    if sports_hits >= 1 and institutional_hits == 0:
+        # Check 3-char acronyms regex misses (cpi, tcu, pf, etc.)
+        words_3 = set(re.findall(r"\b[a-z]{2,3}\b", title_low + " " + desc_low))
+        if words_3 & _SHORT_INST_SIGNALS:
+            institutional_hits = 1
+        # Check political figure in title (Tarcísio/Lula + stadium/sport = keep)
+        elif any(t in title_low for t in
+                 ["tarcisio","lula","haddad","governador","prefeito","ministerio","governo"]):
+            institutional_hits = 1
+        else:
+            return False  # pure sports — no political/institutional angle
+
+    # Celebrity entertainment: block
     if blocked_hits >= 2 and keep_hits == 0:
         return False
 
     # International stories must have a Brazilian angle
-    has_brazil = bool(tokens & _BRAZIL_TOKENS)
-
-    # If nothing relevant AND no Brazil angle AND not investigative source → skip
-    if keep_hits == 0 and not has_brazil and article.source not in {"Intercept","A Pública","Ag. Mural","Fiocruz"}:
+    if keep_hits == 0 and institutional_hits == 0 and not has_brazil \
+       and article.source not in {"Intercept","A Pública","Ag. Mural","Fiocruz"}:
         return False
 
-    # If marginally relevant but zero Brazil angle → skip (e.g. German crime story)
-    if keep_hits <= 1 and not has_brazil:
+    if keep_hits <= 1 and institutional_hits == 0 and not has_brazil:
         return False
 
     return True
@@ -400,6 +450,35 @@ def _parse_response(r, source):
     return []
 
 
+
+
+def _parse_tcu_json(text, name, emoji):
+    """Parse TCU acórdãos webservice JSON response."""
+    articles = []
+    try:
+        data = json.loads(text)
+        # Webservice returns {total, results: [{numeroAcordao, colegiado, dataSessao,
+        #                                       relator, sumario, urlAcordao}]}
+        items = data.get("results") or data.get("hits") or []
+        if isinstance(data, list): items = data
+        for item in items[:20]:
+            n    = item.get("numeroAcordao") or item.get("numeroAcordao","")
+            col  = item.get("colegiado","")
+            date = item.get("dataSessao") or item.get("dataSessionAnterior","")
+            rel  = item.get("relator","")
+            summ = item.get("sumario") or item.get("ementa","")
+            url  = item.get("urlAcordao") or item.get("url","")
+            if n:
+                title = f"Acórdão {n}/{_year_from_date(date)} – {col}"
+                desc  = f"Relator: {rel}. {clean_html(summ)}"[:400] if summ else ""
+                articles.append(Article(title, url, desc, date, name, emoji))
+    except (json.JSONDecodeError, KeyError, TypeError): pass
+    return articles
+
+def _year_from_date(d):
+    import re as _re
+    m = _re.search(r"\d{4}", str(d))
+    return m.group(0) if m else "2026"
 
 def _parse_wp_api(text, name, emoji):
     """Parse WordPress REST API JSON (GET /wp-json/wp/v2/posts)."""
@@ -803,18 +882,34 @@ def extract_5w(cluster):
 INVESTIGATIVE = {"Intercept","A Pública","Ag. Mural","Fiocruz","Jornal USP","Ag. Galão"}
 GRANDE_IMPRENSA = {"G1","G1-SP","Folha","Estadão","O Globo","Metrópoles"}
 
+# Source type groups for independence analysis (Kovach Ch.5)
+MAINSTREAM    = {"G1","G1-SP","Folha","Estadão","O Globo","Metrópoles"}
+INVESTIGATIVE_PLUS = INVESTIGATIVE | {"Intercept","A Pública","Ag. Mural"}
+
 def score_story(cluster):
+    """
+    Kovach Ch.2+4: Truth levels — verification depends on source count AND diversity.
+    Tiers: VERIFICADO (multiple independent witnesses) > RELATADO > APURADO > AVISO
+    """
     sources = cluster["sources"]
-    n = len(sources)
-    inv = sources & INVESTIGATIVE
-    grande = sources & GRANDE_IMPRENSA
-    if n >= 5:   label, emoji = "🔥 VIRAL",     "🔥"
-    elif n >= 3: label, emoji = "📈 TRENDING",  "📈"
-    elif n == 2: label, emoji = "📰 MÚLTIPLAS", "📰"
-    else:        label, emoji = "🔍 EXCLUSIVA", "🔍"
-    # If only investigative covered → worth flagging
-    if n == 1 and sources <= INVESTIGATIVE:
-        label, emoji = "💡 INVESTIGATIVA", "💡"
+    n       = len(sources)
+    inv     = sources & INVESTIGATIVE_PLUS
+    grande  = sources & MAINSTREAM
+    both    = bool(inv) and bool(grande)  # cross-verified
+
+    # Verification tiers (replaces raw viral/trending labels)
+    if n >= 4 or (n >= 3 and both):
+        label, emoji = "🔒 VERIFICADO", "🔒"
+    elif n >= 3:
+        label, emoji = "📋 MÚLTIPLAS", "📋"
+    elif n == 2 and both:
+        label, emoji = "📋 CRUZADO", "📋"  # 2 sources from different groups
+    elif n == 2:
+        label, emoji = "📰 RELATADO", "📰"
+    elif sources <= INVESTIGATIVE_PLUS:
+        label, emoji = "💡 APURADO", "💡"   # single investigative = deeper reporting
+    else:
+        label, emoji = "📡 AVISO", "📡"     # single mainstream = least verified
     return label, emoji, n, bool(inv), bool(grande)
 
 STORY_CATEGORIES = [
@@ -922,114 +1017,107 @@ def fmt_sources(sources_with_links):
 
 def build_story_card(cluster, rank, date_str):
     """
-    Individual story card. Format inspired by DOC-SP monitor:
-    - Header: rank + coverage label + category
-    - Headline in bold
-    - Structured fields (only when available, never empty)
-    - First sentence of context
-    - Sources as named links
-    - Follow-up suggestions if relevant
+    Kovach Ch.8: "Journalism is storytelling with a purpose. Distillation."
+    Each card = WHO verified it + WHAT happened + WHY it matters + WHAT TO DO.
     """
-    _, em_cov, n_sources, has_inv, has_grande = score_story(cluster)
+    label, emoji_cov, n_sources, has_inv, has_grande = score_story(cluster)
     cat_emoji, cat_label = story_category(cluster)
-    w = extract_5w(cluster)
-    rep = pick_representative(cluster)
-    suggestions = suggest_followups(cluster, cluster["sources"])
+    w         = extract_5w(cluster)
+    rep       = pick_representative(cluster)
+    impact    = civic_impact(cat_label.split()[-1].lower() if cat_label else "")
+    action    = civic_action(cat_label.split()[-1].lower() if cat_label else "")
+    ind_note  = source_independence(cluster)
+    followups = suggest_followups(cluster, cluster["sources"])
 
-    # ── HEADER ───────────────────────────────────────────────────
-    cov_label = {1:"1 fonte",2:"2 fontes",3:"3 fontes",
-                 4:"4 fontes",5:"5 fontes"}.get(n_sources, f"{n_sources} fontes")
+    # ── Header: verification tier + category (Kovach Ch.2+4) ──
     lines = [
-        f"{em_cov} *#{rank}* | {cat_emoji} *{cat_label}* | {cov_label}",
+        f"📰 *{date_str}* | {emoji_cov} {label} — {n_sources} fontes",
+        f"{cat_emoji} *{cat_label}*",
         "━━━",
     ]
 
-    # ── TÍTULO ───────────────────────────────────────────────────
-    # Use full cleaned headline (not the short version) in cards
-    headline = w["what"]
-    if len(headline) > 140: headline = headline[:137] + "…"
-    lines.append(f"📌 *{headline}*")
+    # ── WHAT: clean distilled headline (Ch.8 — distillation) ──
+    title = re.sub(r"^(EXCLUSIVO[:\s]+|EXCLUSIVA[:\s]+)", "", w["what"], flags=re.I).strip()
+    title = re.sub(r"^[A-Z][A-Z]{3,}\s*[-\u2013]\s*", "", title).strip()
+    if len(title) > 110: title = title[:107] + "…"
+    lines.append(f"📌 *{title}*")
 
-    # ── CAMPOS ESTRUTURADOS (só exibe se tiver dado real) ────────
-    # WHO — only if it's a genuine person name (not place/project)
-    if w["who"] and len(w["who"]) > 3:
-        lines.append(f"👤 {w['who']}")
+    # ── WHO, WHERE, WHEN (structured 5W) ──
+    if w["who"]:    lines.append(f"👤 {w['who'][:80]}")
+    if w["where"]:  lines.append(f"📍 {w['where']}")
+    lines.append(   f"📅 {w['when']}")
+    if w["value"]:  lines.append(f"💰 {w['value']}")
 
-    # WHERE — only if different from "São Paulo" / "Brasil" defaults
-    if w["where"] and w["where"] not in ("SP","RJ","DF","Brasil"):
-        lines.append(f"📍 {w['where']}")
+    # ── CONTEXT: first sentence only (distillation, not dump) ──
+    if w["context"] and len(w["context"]) > 25:
+        ctx = w["context"][:160] + ("…" if len(w["context"])>160 else "")
+        lines.append(f"💬 _{ctx}_")
 
-    # DATE — only show if it's a real date (not "quarta-feira")
-    if w["when"] and re.match(r"\d{2}/\d{2}/\d{4}", w["when"]):
-        lines.append(f"📅 {w['when']}")
+    # ── WHY IT MATTERS: civic impact (Kovach Ch.8 — relevant to citizens) ──
+    if impact:
+        lines.append(f"\n{impact}")
 
-    # VALUE — always show if present
-    if w["value"]:
-        lines.append(f"💰 {w['value']}")
-
-    # ── CONTEXTO (primeira frase real) ───────────────────────────
-    if w["why"] and len(w["why"]) > 30:
-        lines.append(f"💬 _{w['why']}_")
-
-    # ── FONTES ───────────────────────────────────────────────────
+    # ── SOURCES with verification note (Kovach Ch.3+4 — who verified) ──
     lines.append("━━━")
     src_parts = []
     seen_src  = set()
     for art in cluster["articles"]:
         if art.source not in seen_src:
             seen_src.add(art.source)
-            if art.link:
-                src_parts.append(f"[{art.emoji} {art.source}]({art.link})")
-            else:
-                src_parts.append(f"{art.emoji} {art.source}")
-        if len(src_parts) >= 5: break
+            lnk = f"[{art.emoji} {art.source}]({art.link})" if art.link else f"{art.emoji} {art.source}"
+            src_parts.append(lnk)
     lines.append("📱 " + " · ".join(src_parts))
 
-    # ── GAP + DESDOBRAMENTOS ─────────────────────────────────────
-    gaps = []
-    if n_sources >= 3 and not has_inv:
-        gaps.append("Nenhuma fonte investigativa cobriu — ângulo em aberto")
-    if n_sources == 1 and has_inv:
-        gaps.append("Só fonte especializada cobriu — grande imprensa ainda não")
+    # ── INDEPENDENCE NOTE (Kovach Ch.5 — warn about faction homogeneity) ──
+    if ind_note:
+        lines.append(ind_note)
 
-    if suggestions or gaps:
+    # ── CIVIC ACTION (Kovach Ch.10 — conscience; enable citizen watchdogism) ──
+    if action or followups:
         lines.append("━━━")
-        lines.append("💡 *Desdobramentos:*")
-        for g in gaps[:1]:
-            lines.append(f"  → {g}")
-        for s in suggestions[:2]:
-            lines.append(f"  {s}")
+        if action: lines.append(action)
+        for s in followups[:1]: lines.append(s)
 
     return "\n".join(lines)
 
 
 def build_summary(clusters, all_articles, date_str, failed_sources):
     """
-    First message: compact overview with readable headlines, max 6 stories.
-    Each line: coverage emoji + category + short headline + source count + linked icons.
+    Kovach Ch.9 (Proportion): "Journalism creates a map for citizens to navigate society.
+    Its value depends on completeness and proportionality."
+    Max 6 stories, max 2 per category, coverage gaps shown.
     """
-    n_ok     = len(SOURCES) - len(failed_sources)
-    n_arts   = len(all_articles)
-    viral    = sum(1 for c in clusters if len(c["sources"]) >= 5)
-    trending = sum(1 for c in clusters if 3 <= len(c["sources"]) <= 4)
-    multi    = sum(1 for c in clusters if len(c["sources"]) == 2)
-    exclus   = sum(1 for c in clusters if len(c["sources"]) == 1)
+    n_ok  = len(SOURCES) - len(failed_sources)
+    n_arts = len(all_articles)
+
+    # Proportionality guard (Kovach Ch.9) — max 2 per category
+    cat_count = {}; top = []
+    for c in clusters:
+        _cat_em, _cat_lb = story_category(c); cat_key = _cat_lb
+        if cat_count.get(cat_key, 0) < 2:
+            top.append(c); cat_count[cat_key] = cat_count.get(cat_key, 0) + 1
+        if len(top) >= 6: break
+
+    # Verification tier counts (Kovach Ch.2 — truth levels)
+    verificado = sum(1 for c in clusters if score_story(c)[0].startswith("🔒"))
+    relatado   = sum(1 for c in clusters if score_story(c)[0] in ("📋 MÚLTIPLAS","📋 CRUZADO","📰 RELATADO"))
+    apurado    = sum(1 for c in clusters if score_story(c)[0].startswith("💡"))
+    aviso      = sum(1 for c in clusters if score_story(c)[0].startswith("📡"))
 
     lines = [
-        f"📰 *MONITOR — {date_str}*",
+        f"📰 *MONITOR DE NOTÍCIAS — {date_str}*",
         f"🗞️ {n_ok}/{len(SOURCES)} fontes · {n_arts} pautas relevantes",
-        f"🔥 {viral} viral  📈 {trending} trending  📰 {multi} múltiplas  🔍 {exclus} exclusivas",
+        f"🔒 {verificado} verificadas  📋 {relatado} relatadas  💡 {apurado} apuradas  📡 {aviso} avisos",
         "━━━",
     ]
 
-    for i, c in enumerate(clusters[:6], 1):
-        _, em, n, has_inv, _ = score_story(c)
-        cat_em, _            = story_category(c)
-        rep                  = pick_representative(c)
-        headline             = short_headline(rep.title, rep.description)
-        inv_flag             = " 💡" if has_inv else ""
+    for i, c in enumerate(top, 1):
+        label, em, n, has_inv, has_grande = score_story(c)
+        cat_em, _ = story_category(c)
+        rep      = pick_representative(c)
+        headline = short_headline(rep.title, rep.description)
+        inv_flag = " 💡" if has_inv and not has_grande else ""
 
-        # Source icons with links (max 4)
         src_links = []
         seen = set()
         for art in c["articles"]:
@@ -1040,11 +1128,21 @@ def build_summary(clusters, all_articles, date_str, failed_sources):
 
         lines.append(f"{em} {cat_em} *{i}.* {headline}{inv_flag} · {n}f  " + " ".join(src_links))
 
+    # Coverage gap report (Kovach Ch.9 — comprehensiveness)
+    shown_cats = {story_category(c)[1] for c in top}  # label part like "Política"
+    all_watched = {"Política","Economia","São Paulo","Saúde",
+                   "Meio Ambiente","Investigativo","Judiciário","Segurança"}
+    gaps_labels = all_watched - shown_cats
+    # Map back to emoji labels for display
+    _cat_map = {lb:em for _,em,lb in [(t,e,l) for t,e,l in [(s,story_category({'tokens':set(),'articles':[]}),'') for s in []]]}
+    gaps = gaps_labels
+    if gaps:
+        lines.append(f"_Sem cobertura hoje: {' · '.join(sorted(gaps))}_")
+
     if len(clusters) > 6:
         lines.append(f"_↓ mais {len(clusters)-6} pautas nos cards abaixo_")
     if failed_sources:
-        lines.append("━━━")
-        lines.append("⚠️ Sem resposta: " + ", ".join(failed_sources))
+        lines.append("━━━\n⚠️ Sem resposta: " + ", ".join(failed_sources))
     return "\n".join(lines)
 
 
@@ -1065,7 +1163,7 @@ def build_uncovered(solo_clusters, date_str):
             rep = pick_representative(c)
             src = list(c["sources"])[0]
             emo = next((s["emoji"] for s in SOURCES if s["name"] == src), "")
-            cat_em, _ = story_category(c)
+            cat_em = story_category(c).split()[0]
             t = clean_headline(rep.title)[:70] + ("…" if len(rep.title) > 70 else "")
             lnk = f"[{emo} {src}]({rep.link})" if rep.link else f"{emo} {src}"
             lines.append(f"  {cat_em} {lnk}: _{t}_")
@@ -1076,7 +1174,7 @@ def build_uncovered(solo_clusters, date_str):
             rep = pick_representative(c)
             src = list(c["sources"])[0]
             emo = next((s["emoji"] for s in SOURCES if s["name"] == src), "")
-            cat_em, _ = story_category(c)
+            cat_em = story_category(c).split()[0]
             t = clean_headline(rep.title)[:70] + ("…" if len(rep.title) > 70 else "")
             lnk = f"[{emo} {src}]({rep.link})" if rep.link else f"{emo} {src}"
             lines.append(f"  {cat_em} {lnk}: _{t}_")
@@ -1182,6 +1280,7 @@ INST_SOURCES = [
         "emoji": "📈", "tier": "federal",
         "url":  "https://www.gov.br/cvm/pt-br/assuntos/noticias/deliberacoes/RSS",
         "rss2": "https://www.gov.br/cvm/pt-br/assuntos/noticias/instrucoes/RSS",
+        "rss3": "https://www.gov.br/cvm/pt-br/assuntos/noticias/resolucoes/RSS",
         "fmt":  "rss",
         "home": "https://www.gov.br/cvm/pt-br/assuntos/noticias/deliberacoes",
     },
@@ -1200,26 +1299,32 @@ INST_SOURCES = [
         "full": "CADE — Julgamentos e Decisões",
         "emoji": "⚖️", "tier": "federal",
         "url":  "https://www.gov.br/cade/pt-br/assuntos/julgamentos/RSS",
+        "rss2": "https://www.gov.br/cade/pt-br/assuntos/noticias/notas/RSS",
         "fmt":  "rss",
         "home": "https://www.gov.br/cade/pt-br/assuntos/julgamentos",
     },
     # ═══ TCU — news + acórdãos ══════════════════════════════════════════════════
     {
         "name": "TCU-Notícias",
-        "full": "TCU — Notícias",
+        "full": "TCU — Notícias e Sessões",
         "emoji": "🔍", "tier": "federal",
-        "url":  "https://portal.tcu.gov.br/imprensa/noticias/rss.xml",
-        "rss2": "https://portal.tcu.gov.br/rss/tcu-noticias.rss",
+        # TCU news confirmed at portal.tcu.gov.br/imprensa/noticias
+        # RSS endpoint tested from GitHub Actions
+        "url":  "https://portal.tcu.gov.br/rss/tcu-noticias.rss",
+        "rss2": "https://portal.tcu.gov.br/imprensa/noticias/RSS",
+        "rss3": "https://portal.tcu.gov.br/imprensa/noticias/rss",
         "fmt":  "rss",
-        "home": "https://portal.tcu.gov.br/imprensa/noticias/",
+        "home": "https://portal.tcu.gov.br/imprensa/noticias",
     },
     {
         "name": "TCU-Acórdãos",
-        "full": "TCU — Acórdãos (decisões de auditoria)",
+        "full": "TCU — Acórdãos via webservice JSON",
         "emoji": "🔍", "tier": "federal",
-        "url":  "https://portal.tcu.gov.br/rss/tcu-acordaos-hoje.rss",
-        "rss2": "https://portal.tcu.gov.br/jurisprudencia/acordaos/rss.xml",
-        "fmt":  "rss",
+        # TCU has a documented JSON webservice for acórdãos:
+        # https://sites.tcu.gov.br/dados-abertos/webservices-tcu/
+        "url":  "https://pesquisa.apps.tcu.gov.br/rest/acordao/ACORDAO?q=*&sort=dataSessionAnterior%2Cdesc&size=20",
+        "rss2": "https://portal.tcu.gov.br/rss/tcu-acordaos-hoje.rss",
+        "fmt":  "tcu_json",
         "home": "https://portal.tcu.gov.br/jurisprudencia/acordaos/",
     },
     # ═══ STF + STJ ════════════════════════════════════════════════════════════════
@@ -1236,7 +1341,8 @@ INST_SOURCES = [
         "full": "Superior Tribunal de Justiça",
         "emoji": "⚖️", "tier": "federal",
         "url":  "https://www.stj.jus.br/sites/portalp/Comunicacao/Noticias/RSS",
-        "rss2": "https://www.stj.jus.br/sites/portalp/Paginas/Comunicacao/Noticias/feed.aspx",
+        "rss2": "https://www.stj.jus.br/sites/portalp/Comunicacao/Noticias/feed.aspx",
+        "rss3": "https://www.stj.jus.br/portaldestaque/rssnoticias.asp",
         "fmt":  "rss",
         "home": "https://www.stj.jus.br/sites/portalp/Comunicacao/Noticias",
     },
@@ -1256,6 +1362,7 @@ INST_SOURCES = [
         "emoji": "⚠️", "tier": "federal",
         "url":  "https://www.gov.br/anvisa/pt-br/assuntos/recall/RSS",
         "rss2": "https://www.gov.br/anvisa/pt-br/assuntos/alertas-e-noticias/RSS",
+        "rss3": "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa/@@rss.xml",
         "fmt":  "rss",
         "home": "https://www.gov.br/anvisa/pt-br/assuntos/recall",
     },
@@ -1452,6 +1559,12 @@ def _parse_inst_response(r, source):
     # IBGE JSON
     if fmt == "ibge":
         return _parse_ibge(text)
+
+    # TCU acórdãos webservice
+    if fmt == "tcu_json" or (source.get("name","").startswith("TCU") and text.lstrip().startswith("{")):
+        raw_arts = _parse_tcu_json(text, source["name"], source["emoji"])
+        if raw_arts:
+            return [{"title":a.title,"desc":a.description,"date":a.pub_date,"url":a.link,"cat":"Acórdão"} for a in raw_arts]
 
     # RSS / Atom (default — covers Plone RSS, standard RSS, Atom)
     arts = _parse_xml_feed(body, source["name"], source["emoji"])
