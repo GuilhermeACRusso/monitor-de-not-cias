@@ -1220,7 +1220,7 @@ def build_uncovered(solo_clusters, date_str):
             rep = pick_representative(c)
             src = list(c["sources"])[0]
             emo = next((s["emoji"] for s in SOURCES if s["name"] == src), "")
-            cat_em = story_category(c).split()[0]
+            cat_em = story_category(c)[0]
             t = clean_headline(rep.title)[:70] + ("…" if len(rep.title) > 70 else "")
             lnk = f"[{emo} {src}]({rep.link})" if rep.link else f"{emo} {src}"
             lines.append(f"  {cat_em} {lnk}: _{t}_")
@@ -1231,7 +1231,7 @@ def build_uncovered(solo_clusters, date_str):
             rep = pick_representative(c)
             src = list(c["sources"])[0]
             emo = next((s["emoji"] for s in SOURCES if s["name"] == src), "")
-            cat_em = story_category(c).split()[0]
+            cat_em = story_category(c)[0]
             t = clean_headline(rep.title)[:70] + ("…" if len(rep.title) > 70 else "")
             lnk = f"[{emo} {src}]({rep.link})" if rep.link else f"{emo} {src}"
             lines.append(f"  {cat_em} {lnk}: _{t}_")
@@ -1333,21 +1333,21 @@ INST_SOURCES = [
     },
     {
         "name": "CVM-Decisões",
-        "full": "CVM — Deliberações e Instruções",
+        "full": "CVM — Deliberações via @@rss.xml",
         "emoji": "📈", "tier": "federal",
-        "url":  "https://www.gov.br/cvm/pt-br/assuntos/noticias/deliberacoes/RSS",
-        "rss2": "https://www.gov.br/cvm/pt-br/assuntos/noticias/instrucoes/RSS",
-        "rss3": "https://www.gov.br/cvm/pt-br/assuntos/noticias/resolucoes/RSS",
+        "url":  "https://www.gov.br/cvm/pt-br/assuntos/noticias/@@rss.xml",
+        "rss2": "https://www.gov.br/cvm/pt-br/assuntos/noticias/RSS",
         "fmt":  "rss",
-        "home": "https://www.gov.br/cvm/pt-br/assuntos/noticias/deliberacoes",
+        "home": "https://www.gov.br/cvm/pt-br/assuntos/noticias",
     },
     # ═══ CADE — news + merger decisions ══════════════════════════════════════════
     {
         "name": "CADE-Notícias",
         "full": "CADE — Notícias",
         "emoji": "⚖️", "tier": "federal",
-        "url":  "https://www.gov.br/cade/pt-br/@@rss.xml",
-        "rss2": "https://www.gov.br/cade/pt-br/assuntos/noticias/RSS",
+        "url":  "https://www.gov.br/cade/pt-br/assuntos/noticias/@@rss.xml",
+        "rss2": "https://www.gov.br/cade/pt-br/assuntos/noticias-do-cade/@@rss.xml",
+        "rss3": "https://www.gov.br/cade/pt-br/assuntos/noticias/RSS",
         "fmt":  "rss",
         "home": "https://www.gov.br/cade/pt-br/assuntos/noticias",
     },
@@ -1355,8 +1355,9 @@ INST_SOURCES = [
         "name": "CADE-Julgamentos",
         "full": "CADE — Julgamentos e Decisões",
         "emoji": "⚖️", "tier": "federal",
-        "url":  "https://www.gov.br/cade/pt-br/@@rss.xml",
-        "rss2": "https://www.gov.br/cade/pt-br/assuntos/noticias/RSS",
+        "url":  "https://www.gov.br/cade/pt-br/assuntos/noticias/@@rss.xml",
+        "rss2": "https://www.gov.br/cade/pt-br/assuntos/noticias-do-cade/@@rss.xml",
+        "rss3": "https://www.gov.br/cade/pt-br/assuntos/noticias/RSS",
         "fmt":  "rss",
         "home": "https://www.gov.br/cade/pt-br/assuntos/julgamentos",
     },
@@ -1398,6 +1399,7 @@ INST_SOURCES = [
         "emoji": "⚖️", "tier": "federal",
         "url":  "https://www.stj.jus.br/sites/portalp/Comunicacao/Noticias/RSS",
         "rss2": "https://www.stj.jus.br/portaldestaque/rssnoticias.asp",
+        "home": "https://www.stj.jus.br/sites/portalp/Comunicacao/Noticias",
         "fmt":  "rss",
         "home": "https://www.stj.jus.br/sites/portalp/Comunicacao/Noticias",
     },
@@ -1406,8 +1408,9 @@ INST_SOURCES = [
         "name": "ANVISA-Notícias",
         "full": "ANVISA — Notícias",
         "emoji": "🏥", "tier": "federal",
-        "url":  "https://www.gov.br/anvisa/pt-br/@@rss.xml",
-        "rss2": "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa/RSS",
+        "url":  "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa/@@rss.xml",
+        "rss2": "https://www.gov.br/anvisa/pt-br/assuntos/alertas/@@rss.xml",
+        "rss3": "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa/RSS",
         "fmt":  "rss",
         "home": "https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa",
     },
@@ -1415,8 +1418,8 @@ INST_SOURCES = [
         "name": "ANVISA-Recalls",
         "full": "ANVISA — Recalls e Alertas",
         "emoji": "⚠️", "tier": "federal",
-        "url":  "https://www.gov.br/anvisa/pt-br/@@rss.xml",
-        "rss2": "https://www.gov.br/anvisa/pt-br/assuntos/recall/RSS",
+        "url":  "https://www.gov.br/anvisa/pt-br/assuntos/recall/@@rss.xml",
+        "rss2": "https://www.gov.br/anvisa/pt-br/assuntos/alertas-e-noticias/@@rss.xml",
         "fmt":  "rss",
         "home": "https://www.gov.br/anvisa/pt-br/assuntos/recall",
     },
@@ -1440,7 +1443,7 @@ INST_SOURCES = [
         "name": "ANEEL",
         "full": "ANEEL — Energia Elétrica",
         "emoji": "⚡", "tier": "federal",
-        "url":  "https://www.gov.br/aneel/pt-br/@@rss.xml",
+        "url":  "https://www.gov.br/aneel/pt-br/assuntos/noticias/@@rss.xml",
         "rss2": "https://www.gov.br/aneel/pt-br/assuntos/noticias/RSS",
         "fmt":  "rss", "home": "https://www.gov.br/aneel/pt-br/assuntos/noticias",
     },
@@ -1448,7 +1451,7 @@ INST_SOURCES = [
         "name": "ANTT",
         "full": "ANTT — Transportes Terrestres",
         "emoji": "🚛", "tier": "federal",
-        "url":  "https://www.gov.br/antt/pt-br/@@rss.xml",
+        "url":  "https://www.gov.br/antt/pt-br/assuntos/noticias/@@rss.xml",
         "rss2": "https://www.gov.br/antt/pt-br/assuntos/noticias/RSS",
         "fmt":  "rss", "home": "https://www.gov.br/antt/pt-br/assuntos/noticias",
     },
@@ -1456,7 +1459,7 @@ INST_SOURCES = [
         "name": "AGU",
         "full": "Advocacia-Geral da União",
         "emoji": "🏛️", "tier": "federal",
-        "url":  "https://www.gov.br/agu/pt-br/@@rss.xml",
+        "url":  "https://www.gov.br/agu/pt-br/comunicacao/noticias/@@rss.xml",
         "rss2": "https://www.gov.br/agu/pt-br/comunicacao/noticias/RSS",
         "fmt":  "rss", "home": "https://www.gov.br/agu/pt-br/comunicacao/noticias",
     },
@@ -1489,8 +1492,8 @@ INST_SOURCES = [
         "name": "Seade",
         "full": "Fundação Seade — Estatísticas SP",
         "emoji": "📊", "tier": "estadual",
-        "url":  "https://www.seade.gov.br/feed/",
-        "rss2": "https://www.seade.gov.br/?feed=rss2",
+        "url":  "https://www.seade.gov.br/wp-json/wp/v2/posts?per_page=15&_fields=title,link,excerpt,date",
+        "rss2": "https://www.seade.gov.br/feed/",
         "fmt":  "wp_api", "home": "https://www.seade.gov.br/noticias/",
     },
     {
