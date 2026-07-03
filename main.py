@@ -1,5 +1,5 @@
 """
-Monitor de Notícias v1.4 - Análise de cobertura jornalística brasileira
+Monitor de Notícias v1.5 - Análise de cobertura jornalística brasileira
 =======================================================================
 Fontes: G1, Folha, O Globo, Estadão, Metrópoles, Intercept, Agência Mural,
         A Pública, Fiocruz, Jornal USP, Agência Galão
@@ -49,7 +49,10 @@ keyword extraction — makes them meaningful):
     curation of borderline single-source stories.
 
 Secrets: TELEGRAM_TOKEN, CHAT_ID
-Schedule: 4x/dia (7h, 12h, 17h, 20h BRT)
+Schedule: 4x/dia (~7h, ~12h, ~17h, ~20h BRT — offset a few minutes past
+          the hour on purpose, see YAML; GitHub delays scheduled jobs
+          most right at the top of every hour when everyone else's
+          cron jobs fire too)
 """
 
 import requests, datetime, os, sys, re, json, unicodedata, time, csv
@@ -2946,7 +2949,31 @@ def main():
     date_str = now.strftime("%d/%m/%Y")
     time_str = now.strftime("%H:%M")
     run_str  = f"{date_str} {time_str}"
-    print(f"=== Monitor de Notícias v1.4 - {run_str} BRT ===\n")
+    print(f"=== Monitor de Notícias v1.5 - {run_str} BRT ===\n")
+
+    # v1.5: determine the lookback window ONCE, here, at the top of
+    # main() — before any network calls — using a deterministic signal
+    # rather than a fresh wall-clock read taken after 20-30 minutes of
+    # fetching (the previous bug: two separate time reads could
+    # straddle an hour boundary if execution was delayed, silently
+    # flipping the morning run's 24h window down to 10h).
+    #
+    # RUN_SCHEDULE is set by the workflow to ${{ github.event.schedule }}
+    # — the exact cron string GitHub matched to trigger this run. This
+    # is 100% reliable regardless of how late GitHub actually started
+    # the job (a documented behavior: scheduled workflows can be
+    # delayed, especially right at the top of each hour when every
+    # other repo's cron jobs fire at once). For manual workflow_dispatch
+    # runs, RUN_SCHEDULE is empty, so we fall back to the BRT hour
+    # already captured in `now` above (not a second, later wall-clock read).
+    run_schedule = os.getenv("RUN_SCHEDULE", "").strip()
+    _MORNING_CRON = "17 10 * * 1-5"  # 07:17 BRT — see YAML for why :17 not :00
+    if run_schedule:
+        window_h = 24 if run_schedule == _MORNING_CRON else 10
+        print(f"  Schedule detectado via github.event.schedule: '{run_schedule}' -> window={window_h}h")
+    else:
+        window_h = 24 if now.hour < 10 else 10
+        print(f"  Execução manual (workflow_dispatch) — usando hora BRT {now.hour}h -> window={window_h}h")
 
     ledger = NewsLedger("news_ledger.csv")
     graph  = EntityGraph("news_graph")
@@ -3002,9 +3029,8 @@ def main():
 
     # 2. Cluster
     print("\n  Clusterizando...")
-    # Use shorter window for afternoon/evening runs to avoid morning repeats
-    hour_utc = datetime.datetime.utcnow().hour
-    window_h = 24 if hour_utc <= 12 else 10  # 7h run: 24h; 12h/17h/20h: 10h
+    # v1.5: window_h was already determined deterministically at the
+    # top of main() (see comment there) — no longer re-read here.
     clusters, recent = cluster_articles(all_articles, min_shared=2, window_hours=window_h)
     multi_source  = [c for c in clusters if len(c["sources"]) >= 2]
     single_source = [c for c in clusters if len(c["sources"]) == 1]
