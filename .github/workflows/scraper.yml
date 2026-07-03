@@ -2,24 +2,24 @@ name: Monitor de Notícias
 
 on:
   schedule:
-    - cron: '0 10 * * 1-5'  # 07:00 BRT (UTC-3)
-    - cron: '0 15 * * 1-5'  # 12:00 BRT
-    - cron: '0 20 * * 1-5'  # 17:00 BRT
-    - cron: '0 23 * * 1-5'  # 20:00 BRT
+    # v1.5: minutes offset away from :00 on purpose. GitHub documents
+    # that scheduled workflows are delayed most right at the top of
+    # every hour, since that's when every other repo's cron jobs also
+    # fire — landing at :17/:22/:38/:53 avoids that specific congestion
+    # spike. Times below are still ~07:00/12:00/17:00/20:00 BRT, just
+    # not exactly on the hour.
+    - cron: '17 10 * * 1-5'  # ~07:17 BRT (morning digest, 24h lookback)
+    - cron: '22 15 * * 1-5'  # ~12:22 BRT
+    - cron: '38 20 * * 1-5'  # ~17:38 BRT
+    - cron: '53 23 * * 1-5'  # ~20:53 BRT
   workflow_dispatch:
 
-# Required to commit news_ledger.csv and the news_graph_*.csv files
-# back to the repo.
 permissions:
   contents: write
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    # bumped to 40 minutes — source count grew from 12 (v1.0) to 39 (v1.4)
-    # (12 -> 39), and several of the new local/regional sources are
-    # best-effort RSS guesses that may fall through to the slower
-    # Playwright HTML-scraping path.
     timeout-minutes: 40
 
     steps:
@@ -42,6 +42,12 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # v1.5: tells the script exactly which cron fired, so it can
+          # pick the correct lookback window (24h morning vs 10h
+          # otherwise) deterministically — immune to how late GitHub
+          # actually started the job. Empty string on manual
+          # workflow_dispatch runs, which the script handles separately.
+          RUN_SCHEDULE: ${{ github.event.schedule }}
 
       - name: Commit and push ledger and graph
         run: |
