@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consulta de Linha do Tempo — DOC-SP</title>
+<style>
+  :root {
+    --paper: #F2EFE6;
+    --paper-raised: #FBFAF5;
+    --ink: #1C1B19;
+    --ink-soft: #55524A;
+    --stamp-blue: #1D3557;
+    --stamp-blue-soft: #2C4A73;
+    --stamp-red: #8B2635;
+    --brass: #A67C3D;
+    --line: #D8D2C2;
+    --line-soft: #E8E4D8;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+
+  .protocol {
+    font-family: "Courier New", ui-monospace, monospace;
+  }
+
+  header {
+    padding: 32px 24px 24px;
+    border-bottom: 3px double var(--ink);
+    text-align: center;
+  }
+
+  header h1 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 700;
+    font-size: 28px;
+    margin: 0 0 4px;
+    letter-spacing: 0.02em;
+  }
+
+  header p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+
+  .protocol-tag {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 3px 10px;
+    border: 1px solid var(--brass);
+    color: var(--brass);
+    font-family: "Courier New", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  main {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 28px 20px 60px;
+  }
+
+  .upload-zone {
+    background: var(--paper-raised);
+    border: 2px dashed var(--line);
+    border-radius: 4px;
+    padding: 28px 20px;
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  .upload-zone.has-data {
+    border-style: solid;
+    border-color: var(--stamp-blue);
+  }
+
+  .upload-zone p {
+    margin: 0 0 14px;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+
+  .upload-zone input[type=file] {
+    display: none;
+  }
+
+  .btn {
+    display: inline-block;
+    background: var(--stamp-blue);
+    color: var(--paper-raised);
+    border: none;
+    padding: 10px 22px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .btn:hover { background: var(--stamp-blue-soft); }
+  .btn:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+  .status-line {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .status-line.ok { color: var(--stamp-blue); font-weight: 600; }
+  .status-line.err { color: var(--stamp-red); font-weight: 600; }
+
+  .search-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .search-row input[type=text] {
+    flex: 1;
+    padding: 11px 14px;
+    font-size: 15px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: var(--paper-raised);
+    color: var(--ink);
+    font-family: inherit;
+  }
+  .search-row input[type=text]:focus-visible {
+    outline: 2px solid var(--stamp-blue);
+    outline-offset: 1px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    padding: 9px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    font-family: inherit;
+    letter-spacing: 0.02em;
+  }
+  .tab-btn.active {
+    color: var(--stamp-blue);
+    border-bottom-color: var(--stamp-blue);
+  }
+  .tab-btn:focus-visible { outline: 2px solid var(--brass); }
+
+  #stats-panel {
+    display: none;
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+    font-size: 14px;
+  }
+  #stats-panel.show { display: block; }
+  #stats-panel .stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  #stats-panel .stat-row:last-child { border-bottom: none; }
+  #stats-panel .stat-label { color: var(--ink-soft); }
+  #stats-panel .stat-value { font-weight: 700; font-family: "Courier New", monospace; }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+
+  .result-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .result-item {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 12px 16px;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--ink);
+  }
+  .result-item:hover { border-color: var(--stamp-blue); }
+  .result-item:focus-visible { outline: 2px solid var(--stamp-blue); }
+  .result-item .name { font-weight: 700; }
+  .result-item .meta { color: var(--ink-soft); font-size: 12px; margin-top: 2px; }
+
+  .stamp {
+    display: inline-block;
+    font-family: "Courier New", ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+    transform: rotate(-1.5deg);
+  }
+  .stamp-empresa { color: var(--stamp-blue); }
+  .stamp-pessoa { color: var(--brass); }
+  .stamp-orgao { color: var(--ink-soft); }
+  .stamp-vip { color: var(--stamp-red); }
+
+  .entity-header {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--stamp-blue);
+    border-radius: 3px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+  }
+  .entity-header h2 {
+    font-family: Georgia, serif;
+    font-size: 20px;
+    margin: 6px 0 8px;
+  }
+  .entity-header .meta-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .entity-header .meta-grid strong { color: var(--ink); }
+
+  .back-link {
+    background: none;
+    border: none;
+    color: var(--stamp-blue);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0 0 14px;
+    font-family: inherit;
+    font-weight: 600;
+  }
+  .back-link:hover { text-decoration: underline; }
+
+  .timeline {
+    position: relative;
+    padding-left: 24px;
+    border-left: 2px solid var(--line);
+  }
+  .timeline-event {
+    position: relative;
+    padding-bottom: 22px;
+  }
+  .timeline-event::before {
+    content: "";
+    position: absolute;
+    left: -30px;
+    top: 4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--stamp-blue);
+    border: 2px solid var(--paper);
+  }
+  .timeline-event .date {
+    font-family: "Courier New", monospace;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--stamp-blue);
+  }
+  .timeline-event .type-cat {
+    font-size: 11px;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-left: 8px;
+  }
+  .timeline-event .desc {
+    margin: 4px 0 2px;
+    font-size: 14px;
+  }
+  .timeline-event .value {
+    font-weight: 700;
+    color: var(--stamp-red);
+  }
+  .timeline-event .processo {
+    font-family: "Courier New", monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+  }
+
+  .network-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .network-edge {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .network-edge .arrow {
+    font-size: 18px;
+    color: var(--brass);
+    flex-shrink: 0;
+  }
+  .network-edge .rel-info { flex: 1; }
+  .network-edge .rel-type {
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    color: var(--stamp-blue);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .network-edge .other-name {
+    font-weight: 700;
+    margin-top: 2px;
+  }
+  .network-edge .evidence {
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+  }
+
+  footer {
+    text-align: center;
+    padding: 24px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    border-top: 1px solid var(--line);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Consulta de Linha do Tempo</h1>
+  <p>Monitor DOC-SP — rede de entidades e eventos</p>
+  <span class="protocol-tag">Consulta local · sem instalação</span>
+</header>
+
+<main>
+  <div class="upload-zone" id="uploadZone">
+    <p>Selecione os 3 arquivos baixados do GitHub: <strong>graph_entities.csv</strong>,
+       <strong>graph_relationships.csv</strong> e <strong>graph_events.csv</strong>
+       (segure Ctrl ou Cmd para selecionar os três de uma vez).</p>
+    <button class="btn" id="pickBtn">Selecionar arquivos</button>
+    <input type="file" id="fileInput" accept=".csv" multiple>
+    <div class="status-line" id="statusLine"></div>
+  </div>
+
+  <div id="statsPanel" style="display:none">
+    <div id="stats-panel" class="show">
+      <div class="stat-row"><span class="stat-label">Total de entidades</span><span class="stat-value" id="statEntities">—</span></div>
+      <div class="stat-row"><span class="stat-label">&nbsp;&nbsp;empresas</span><span class="stat-value" id="statEmpresas">—</span></div>
+      <div class="stat-row"><span class="stat-label">&nbsp;&nbsp;pessoas</span><span class="stat-value" id="statPessoas">—</span></div>
+      <div class="stat-row"><span class="stat-label">&nbsp;&nbsp;órgãos</span><span class="stat-value" id="statOrgaos">—</span></div>
+      <div class="stat-row"><span class="stat-label">&nbsp;&nbsp;vip</span><span class="stat-value" id="statVip">—</span></div>
+      <div class="stat-row"><span class="stat-label">Total de relações</span><span class="stat-value" id="statRels">—</span></div>
+      <div class="stat-row"><span class="stat-label">Total de eventos</span><span class="stat-value" id="statEvents">—</span></div>
+    </div>
+  </div>
+
+  <div id="searchSection" style="display:none">
+    <div class="search-row">
+      <input type="text" id="searchInput" placeholder="Buscar empresa, pessoa, órgão ou CNPJ...">
+    </div>
+    <div id="searchResults" class="result-list"></div>
+    <div class="empty-state" id="emptyState" style="display:none">Nenhuma entidade encontrada.</div>
+  </div>
+
+  <div id="detailSection" style="display:none">
+    <button class="back-link" id="backBtn">← voltar à busca</button>
+    <div class="entity-header" id="entityHeader"></div>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="timeline">Linha do tempo</button>
+      <button class="tab-btn" data-tab="network">Rede de relacionamentos</button>
+    </div>
+    <div id="timelineTab"><div class="timeline" id="timelineContent"></div></div>
+    <div id="networkTab" style="display:none"><div class="network-list" id="networkContent"></div></div>
+  </div>
+</main>
+
+<footer>
+  Nenhum dado é enviado a servidores — tudo roda no seu navegador.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  let entities = {};       // entity_id -> row
+  let relationships = [];  // array of row
+  let events = [];         // array of row
+
+  // ---------- CSV parsing (handles quoted fields with embedded commas/quotes) ----------
+  function parseCSV(text) {
+    const rows = [];
+    let row = [];
+    let field = "";
+    let inQuotes = false;
+    let i = 0;
+    const len = text.length;
+    while (i < len) {
+      const c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+          inQuotes = false; i++; continue;
+        }
+        field += c; i++; continue;
+      } else {
+        if (c === '"') { inQuotes = true; i++; continue; }
+        if (c === ',') { row.push(field); field = ""; i++; continue; }
+        if (c === '\r') { i++; continue; }
+        if (c === '\n') { row.push(field); rows.push(row); row = []; field = ""; i++; continue; }
+        field += c; i++; continue;
+      }
+    }
+    if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+    if (!rows.length) return [];
+    const header = rows[0];
+    return rows.slice(1).filter(r => r.length > 1 || r[0] !== "").map(r => {
+      const obj = {};
+      header.forEach((h, idx) => { obj[h] = r[idx] !== undefined ? r[idx] : ""; });
+      return obj;
+    });
+  }
+
+  function normalize(s) {
+    return (s || "").toString().toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function brDateSortKey(d) {
+    const parts = (d || "").split("/");
+    if (parts.length === 3) {
+      const [dd, mm, yyyy] = parts.map(Number);
+      if (!isNaN(dd) && !isNaN(mm) && !isNaN(yyyy)) return yyyy * 10000 + mm * 100 + dd;
+    }
+    return 0;
+  }
+
+  // ---------- File loading ----------
+  const fileInput = document.getElementById("fileInput");
+  const pickBtn = document.getElementById("pickBtn");
+  const statusLine = document.getElementById("statusLine");
+  const uploadZone = document.getElementById("uploadZone");
+
+  pickBtn.addEventListener("click", () => fileInput.click());
+
+  fileInput.addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+
+    let foundEntities = null, foundRels = null, foundEvents = null;
+    for (const f of files) {
+      const text = await f.text();
+      if (f.name.includes("entities")) foundEntities = parseCSV(text);
+      else if (f.name.includes("relationships")) foundRels = parseCSV(text);
+      else if (f.name.includes("events")) foundEvents = parseCSV(text);
+    }
+
+    const missing = [];
+    if (!foundEntities) missing.push("graph_entities.csv");
+    if (!foundRels) missing.push("graph_relationships.csv");
+    if (!foundEvents) missing.push("graph_events.csv");
+
+    if (missing.length) {
+      statusLine.className = "status-line err";
+      statusLine.textContent = "⚠️ Faltando: " + missing.join(", ") +
+        " — selecione os três arquivos juntos (Ctrl/Cmd + clique).";
+      return;
+    }
+
+    entities = {};
+    foundEntities.forEach(row => { if (row.entity_id) entities[row.entity_id] = row; });
+    relationships = foundRels;
+    events = foundEvents;
+
+    statusLine.className = "status-line ok";
+    statusLine.textContent = `✅ Carregado: ${Object.keys(entities).length} entidades, ` +
+      `${relationships.length} relações, ${events.length} eventos.`;
+    uploadZone.classList.add("has-data");
+
+    renderStats();
+    document.getElementById("statsPanel").style.display = "block";
+    document.getElementById("searchSection").style.display = "block";
+    document.getElementById("searchInput").focus();
+  });
+
+  // ---------- Stats ----------
+  function renderStats() {
+    const byType = {};
+    Object.values(entities).forEach(row => {
+      byType[row.entity_type] = (byType[row.entity_type] || 0) + 1;
+    });
+    document.getElementById("statEntities").textContent = Object.keys(entities).length;
+    document.getElementById("statEmpresas").textContent = byType.empresa || 0;
+    document.getElementById("statPessoas").textContent = byType.pessoa || 0;
+    document.getElementById("statOrgaos").textContent = byType.orgao || 0;
+    document.getElementById("statVip").textContent = byType.vip || 0;
+    document.getElementById("statRels").textContent = relationships.length;
+    document.getElementById("statEvents").textContent = events.length;
+  }
+
+  // ---------- Search ----------
+  function findEntities(query) {
+    const qDigits = query.replace(/\D/g, "");
+    const qNorm = normalize(query);
+    const exact = [], substr = [];
+    Object.entries(entities).forEach(([eid, row]) => {
+      if (qDigits.length >= 11) {
+        if ((row.cnpj || "").replace(/\D/g, "") === qDigits) { exact.push([eid, row]); return; }
+      }
+      const cname = normalize(row.canonical_name);
+      if (qNorm === cname) { exact.push([eid, row]); return; }
+      const aliasHit = (row.aliases || "").split("|").some(a => a && normalize(a).includes(qNorm));
+      if (cname.includes(qNorm) || aliasHit) substr.push([eid, row]);
+    });
+    return exact.length ? exact : substr;
+  }
+
+  const searchInput = document.getElementById("searchInput");
+  const searchResults = document.getElementById("searchResults");
+  const emptyState = document.getElementById("emptyState");
+
+  searchInput.addEventListener("input", () => {
+    const q = searchInput.value.trim();
+    searchResults.innerHTML = "";
+    if (q.length < 2) { emptyState.style.display = "none"; return; }
+    const matches = findEntities(q).slice(0, 25);
+    emptyState.style.display = matches.length ? "none" : "block";
+    matches.forEach(([eid, row]) => {
+      const btn = document.createElement("button");
+      btn.className = "result-item";
+      btn.innerHTML = `<span class="stamp stamp-${row.entity_type}">${row.entity_type}</span> ` +
+        `<div class="name">${escapeHtml(row.canonical_name)}</div>` +
+        `<div class="meta">${row.total_events} evento(s) · ${row.first_seen}–${row.last_seen}</div>`;
+      btn.addEventListener("click", () => showEntity(eid));
+      searchResults.appendChild(btn);
+    });
+  });
+
+  function escapeHtml(s) {
+    const d = document.createElement("div");
+    d.textContent = s || "";
+    return d.innerHTML;
+  }
+
+  // ---------- Entity detail view ----------
+  const searchSection = document.getElementById("searchSection");
+  const detailSection = document.getElementById("detailSection");
+  const statsPanelWrap = document.getElementById("statsPanel");
+
+  document.getElementById("backBtn").addEventListener("click", () => {
+    detailSection.style.display = "none";
+    searchSection.style.display = "block";
+    statsPanelWrap.style.display = "block";
+  });
+
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const tab = btn.dataset.tab;
+      document.getElementById("timelineTab").style.display = tab === "timeline" ? "block" : "none";
+      document.getElementById("networkTab").style.display = tab === "network" ? "block" : "none";
+    });
+  });
+
+  function showEntity(eid) {
+    const entity = entities[eid];
+    if (!entity) return;
+
+    searchSection.style.display = "none";
+    statsPanelWrap.style.display = "none";
+    detailSection.style.display = "block";
+
+    document.getElementById("entityHeader").innerHTML = `
+      <span class="stamp stamp-${entity.entity_type}">${entity.entity_type}</span>
+      <h2>${escapeHtml(entity.canonical_name)}</h2>
+      <div class="meta-grid">
+        ${entity.cnpj ? `<span>CNPJ</span><strong class="protocol">${entity.cnpj}</strong>` : ""}
+        <span>Primeiro registro</span><strong>${entity.first_seen}</strong>
+        <span>Último registro</span><strong>${entity.last_seen}</strong>
+        <span>Total de eventos</span><strong>${entity.total_events}</strong>
+        ${entity.aliases ? `<span>Também aparece como</span><strong>${escapeHtml(entity.aliases.replace(/\|/g, ", "))}</strong>` : ""}
+      </div>`;
+
+    // Reset to timeline tab
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelector('.tab-btn[data-tab="timeline"]').classList.add("active");
+    document.getElementById("timelineTab").style.display = "block";
+    document.getElementById("networkTab").style.display = "none";
+
+    renderTimeline(eid);
+    renderNetwork(eid);
+  }
+
+  function renderTimeline(eid) {
+    const evs = events
+      .filter(e => (e.entity_ids || "").split("|").includes(eid))
+      .sort((a, b) => brDateSortKey(a.date) - brDateSortKey(b.date));
+
+    const container = document.getElementById("timelineContent");
+    if (!evs.length) {
+      container.innerHTML = '<div class="empty-state">Nenhum evento registrado para esta entidade.</div>';
+      return;
+    }
+    container.innerHTML = evs.map(e => `
+      <div class="timeline-event">
+        <span class="date protocol">${e.date}</span>
+        <span class="type-cat">${escapeHtml(e.event_type)} · ${escapeHtml(e.category)}</span>
+        <div class="desc">${escapeHtml(e.description)}
+          ${e.value ? `<span class="value"> — ${escapeHtml(e.value)}</span>` : ""}
+        </div>
+        ${e.processo ? `<div class="processo protocol">SEI ${e.processo}</div>` : ""}
+      </div>
+    `).join("");
+  }
+
+  function renderNetwork(eid) {
+    const edges = [];
+    relationships.forEach(row => {
+      if (row.from_entity_id === eid) {
+        const other = entities[row.to_entity_id];
+        if (other) edges.push({ rel: row.rel_type, other, row, dir: "out" });
+      } else if (row.to_entity_id === eid) {
+        const other = entities[row.from_entity_id];
+        if (other) edges.push({ rel: row.rel_type, other, row, dir: "in" });
+      }
+    });
+    edges.sort((a, b) => (parseInt(b.row.evidence_count) || 1) - (parseInt(a.row.evidence_count) || 1));
+
+    const container = document.getElementById("networkContent");
+    if (!edges.length) {
+      container.innerHTML = '<div class="empty-state">Nenhuma conexão direta registrada.</div>';
+      return;
+    }
+    container.innerHTML = edges.map(({ rel, other, row, dir }) => `
+      <div class="network-edge">
+        <span class="arrow">${dir === "out" ? "→" : "←"}</span>
+        <div class="rel-info">
+          <div class="rel-type protocol">${escapeHtml(rel)}</div>
+          <div class="other-name">${escapeHtml(other.canonical_name)}
+            <span class="stamp stamp-${other.entity_type}" style="margin-left:6px">${other.entity_type}</span>
+          </div>
+          <div class="evidence">${row.evidence_count}x · ${row.first_seen}–${row.last_seen}
+            ${row.example_processo ? `· SEI ${row.example_processo}` : ""}</div>
+        </div>
+      </div>
+    `).join("");
+  }
+
+})();
+</script>
+
+</body>
+</html>
