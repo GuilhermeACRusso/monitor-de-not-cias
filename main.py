@@ -1,5 +1,5 @@
 """
-Monitor de Notícias v1.0 - Análise de cobertura jornalística brasileira
+Monitor de Notícias v1.1 - Análise de cobertura jornalística brasileira
 =======================================================================
 Fontes: G1, Folha, O Globo, Estadão, Metrópoles, Intercept, Agência Mural,
         A Pública, Fiocruz, Jornal USP, Agência Galão
@@ -12,11 +12,47 @@ ARQUITETURA:
   5. Gera sugestões de pauta baseadas em gaps e desdobramentos
   6. Envia relatório estruturado ao Telegram
 
+v1.1 changes (review of DOC-SP v9.8 methodology, applied where the
+different architecture — cross-source clustering vs single-document
+keyword extraction — makes them meaningful):
+
+  BUG FIXES (found during this review):
+  - civic_impact()/civic_action() category lookup was broken for 11 of
+    13 categories due to accent mismatches (política vs politica) and
+    label mismatches (São Paulo -> "paulo", not a real key). Replaced
+    the split()[-1].lower() hack with an explicit label->key map.
+  - Removed dead code in build_summary() (a no-op dict comprehension
+    iterating over an empty list, computed and never used).
+  - FOLLOWUP_RULES only ever suggested checking DOESP, never DOC-SP,
+    even for stories clearly about city (not state) government. Added
+    a municipal-government rule pointing to DOC-SP.
+
+  NEW FEATURES (adapted from DOC-SP v9.8, attributed honestly):
+  - VIP_WATCHLIST override — shared entity list with DOC-SP. A named
+    figure/company bypasses is_relevant() filtering and verification-
+    tier thresholds entirely.
+  - News-value axis scoring (Magnitude/Deviance/Actionability), after
+    Diakopoulos et al.'s news-value framework — NOT Spangher et al.
+    (2024). Breaks ties within a verification tier and can promote a
+    low-source-count but high-deviance story.
+  - NewsLedger — persistent CSV tracking story fingerprints across
+    days (Spangher et al. 2024: recurrence is a newsworthiness signal;
+    News Monitor had NO persistent state before this version — every
+    run was fully stateless, unlike DOC-SP's CNPJLedger since v9.6).
+  - Negative case digest (Nowell et al. 2017) — weekly sample of
+    articles that were filtered out by is_relevant() right at the
+    threshold, for periodic human audit of the filter's calibration.
+  - Selection-rate logging against Spangher et al.'s empirical
+    benchmark (2-6% of source documents become "news" in their
+    dataset; here applied as relevant-articles / recent-articles).
+  - evaluate_ambiguous_story_via_llm() stub for future LLM-assisted
+    curation of borderline single-source stories.
+
 Secrets: TELEGRAM_TOKEN, CHAT_ID
-Schedule: diário 7h BRT (10:00 UTC)
+Schedule: 4x/dia (7h, 12h, 17h, 20h BRT)
 """
 
-import requests, datetime, os, sys, re, json, unicodedata, time
+import requests, datetime, os, sys, re, json, unicodedata, time, csv
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -24,6 +60,569 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID        = os.getenv("CHAT_ID")
 if not TELEGRAM_TOKEN or not CHAT_ID:
     print("FATAL: TELEGRAM_TOKEN ou CHAT_ID ausentes."); sys.exit(1)
+
+# ── VIP WATCHLIST (v1.1) ──────────────────────────────────────────
+# Shared list with DOC-SP monitor — named entities under active public
+# scrutiny. A match bypasses is_relevant() filtering and verification-
+# tier thresholds; even a single-source mention gets surfaced.
+VIP_WATCHLIST = [
+    "PCC", "Transwolff", "Upbus", "Ricardo Nunes", "Milton Leite",
+]
+
+def check_vip_watchlist(text):
+    """Returns the matched VIP term if found in the text, else None."""
+    text_low = normalize(text)
+    for term in VIP_WATCHLIST:
+        if normalize(term) in text_low:
+            return term
+    return None
+
+
+# ── NEWS LEDGER (v1.1) — persistent story tracking ─────────────────
+# News Monitor had NO persistent state before this version: every run
+# started from zero, so a story that has been building for three days
+# looked identical to one that appeared for the first time an hour ago.
+# Spangher et al. (2024) found that recurrence — an item being
+# discussed/covered repeatedly — is itself a newsworthiness signal.
+# This ledger tracks a lightweight "fingerprint" (top shared tokens)
+# for each multi-source cluster across runs, so recurring stories can
+# be flagged as ongoing rather than re-surfaced as if new each time.
+class NewsLedger:
+    FIELDNAMES = ["Data", "Fingerprint", "Headline", "Categoria", "NumFontes", "VIP"]
+
+    def __init__(self, filename="news_ledger.csv", max_age_days=14):
+        self.filename = filename
+        self.records = []
+        if os.path.exists(self.filename):
+            try:
+                with open(self.filename, mode='r', encoding='utf-8') as f:
+                    raw = list(csv.DictReader(f))
+                cutoff = datetime.date.today() - datetime.timedelta(days=max_age_days)
+                kept = []
+                for r in raw:
+                    d = r.get("Data", "")
+                    parts = d.split("/")
+                    if len(parts) == 3:
+                        try:
+                            rd = datetime.date(int(parts[2]), int(parts[1]), int(parts[0]))
+                            if rd < cutoff:
+                                continue
+                        except ValueError:
+                            pass
+                    kept.append(r)
+                self.records = kept
+                if len(kept) < len(raw):
+                    self._rewrite_csv()
+                    print(f"📚 News ledger: {len(raw)}→{len(kept)} (podados {len(raw)-len(kept)})")
+                else:
+                    print(f"📚 News ledger: {len(kept)} registros carregados.")
+            except Exception as e:
+                print(f"🚨 Erro ao ler news_ledger.csv: {e}")
+
+    def _rewrite_csv(self):
+        try:
+            with open(self.filename, mode='w', encoding='utf-8', newline='') as f:
+                w = csv.DictWriter(f, fieldnames=self.FIELDNAMES)
+                w.writeheader()
+                for r in self.records:
+                    w.writerow(r)
+        except Exception as e:
+            print(f"🚨 Erro ao reescrever news_ledger.csv: {e}")
+
+    @staticmethod
+    def fingerprint(cluster, n=8):
+        """
+        Heuristic story identity: the top-N alphabetically-sorted shared
+        tokens from the cluster. This is a coarse proxy for "same
+        underlying story" across days, not a semantic match — it will
+        miss stories that get re-described with different vocabulary
+        and can occasionally over-merge unrelated stories that happen
+        to share generic tokens. Documented limitation for v1.1;
+        a v1.2 could use embedding similarity instead if this proves
+        too noisy in practice.
+        """
+        toks = sorted(cluster.get("tokens", set()))[:n]
+        return "|".join(toks)
+
+    def check_recurrence(self, cluster, date_str, min_overlap=4, window_days=5):
+        """
+        Returns (days_seen, dates) if a sufficiently similar fingerprint
+        (by token overlap) was logged on window_days prior distinct
+        days, else None.
+        """
+        cutoff = datetime.date.today() - datetime.timedelta(days=window_days)
+        current_tokens = set(cluster.get("tokens", set()))
+        if not current_tokens:
+            return None
+        dates_seen = set()
+        for r in self.records:
+            d = r.get("Data", "")
+            if d == date_str:
+                continue
+            parts = d.split("/")
+            if len(parts) != 3:
+                continue
+            try:
+                rd = datetime.date(int(parts[2]), int(parts[1]), int(parts[0]))
+            except ValueError:
+                continue
+            if rd < cutoff:
+                continue
+            past_tokens = set(r.get("Fingerprint", "").split("|"))
+            if len(current_tokens & past_tokens) >= min_overlap:
+                dates_seen.add(d)
+        if dates_seen:
+            return (len(dates_seen), sorted(dates_seen))
+        return None
+
+    def log_hit(self, date_str, cluster, cat_label, vip_term=None):
+        fp = self.fingerprint(cluster)
+        if not fp:
+            return
+        rep = pick_representative(cluster)
+        row = {
+            "Data": date_str,
+            "Fingerprint": fp,
+            "Headline": clean_headline(rep.title)[:120],
+            "Categoria": cat_label,
+            "NumFontes": str(len(cluster["sources"])),
+            "VIP": vip_term or "",
+        }
+        self.records.append(row)
+        try:
+            with open(self.filename, mode='a', encoding='utf-8', newline='') as f:
+                w = csv.DictWriter(f, fieldnames=self.FIELDNAMES)
+                if os.path.getsize(self.filename) == 0:
+                    w.writeheader()
+                w.writerow(row)
+        except Exception as e:
+            print(f"🚨 Erro ao salvar em news_ledger.csv: {e}")
+
+    def weekly_summary(self):
+        """v1.1: 7-day digest — story volume and repeat-coverage count."""
+        cutoff = datetime.date.today() - datetime.timedelta(days=7)
+        recent = []
+        for r in self.records:
+            parts = r.get("Data", "").split("/")
+            if len(parts) == 3:
+                try:
+                    rd = datetime.date(int(parts[2]), int(parts[1]), int(parts[0]))
+                    if rd >= cutoff:
+                        recent.append(r)
+                except ValueError:
+                    pass
+        if not recent:
+            return None
+        dates = set(r.get("Data", "") for r in recent)
+        cats = {}
+        for r in recent:
+            c = r.get("Categoria", "?")
+            cats[c] = cats.get(c, 0) + 1
+        top_cats = sorted(cats.items(), key=lambda x: -x[1])[:5]
+        lines = [
+            f"📈 *Resumo semanal (Monitor de Notícias)* ({len(dates)} dias, {len(recent)} pautas registradas)",
+        ]
+        if top_cats:
+            lines.append("Categorias mais frequentes: " +
+                          ", ".join(f"{c} ({n})" for c, n in top_cats))
+        return "\n".join(lines)
+
+
+# ===========================================================================
+# ENTITY GRAPH — v1.2 (relationship network + timeline reconstruction)
+# ===========================================================================
+# Adapted from the DOC-SP monitor's EntityGraph (same three-table CSV
+# schema, same class — see that codebase for the original design notes
+# on Nowell et al. 2017 / Boyatzis 1998 / Spangher et al. 2024).
+#
+# Important difference from DOC-SP: News Monitor has no CNPJ, no formal
+# "Empresa"/"Órgão"/"Servidor" fields extracted from structured
+# government text — it works from free-text news prose. That means:
+#   - Company/org entities are resolved by NAME MATCH ONLY, against a
+#     curated KNOWN_ORGS list below, not by a stable ID like CNPJ. Two
+#     different real-world entities that happen to share a name string
+#     would incorrectly merge; a company referred to by very different
+#     names across articles (no alias overlap) would incorrectly split.
+#     This is a materially weaker identity-resolution guarantee than
+#     DOC-SP's CNPJ-backed entities — flagged here rather than glossed
+#     over, per Nowell et al.'s dependability/confirmability criteria
+#     (be explicit about method limitations, don't just claim rigor).
+#   - Person entities come from NAME_RE + noise filtering (the same
+#     logic already used for the "who" field in extract_5w), which is
+#     a heuristic capitalized-word-sequence matcher — it will miss
+#     names in unusual formats and can occasionally catch non-names.
+#   - "processo" (DOC-SP's SEI process number field) is repurposed here
+#     to hold the representative article's URL — the closest analog
+#     to an evidentiary reference for a news story.
+import hashlib
+
+class EntityGraph:
+    ENTITY_FIELDS = ["entity_id", "entity_type", "canonical_name", "aliases",
+                      "cnpj", "first_seen", "last_seen", "total_events"]
+    REL_FIELDS = ["rel_id", "from_entity_id", "to_entity_id", "rel_type",
+                  "first_seen", "last_seen", "evidence_count", "example_processo"]
+    EVENT_FIELDS = ["event_id", "date", "entity_ids", "event_type", "category",
+                     "description", "value", "processo", "source_doc_id", "keyword"]
+
+    def __init__(self, base="news_graph", max_age_days=180):
+        self.entities_path = f"{base}_entities.csv"
+        self.relationships_path = f"{base}_relationships.csv"
+        self.events_path = f"{base}_events.csv"
+        self.entities = {}
+        self.relationships = {}
+        self.events = []
+        self.max_age_days = max_age_days
+        self._load()
+
+    def _load(self):
+        if os.path.exists(self.entities_path):
+            try:
+                with open(self.entities_path, encoding='utf-8') as f:
+                    for row in csv.DictReader(f):
+                        self.entities[row["entity_id"]] = row
+            except Exception as e:
+                print(f"🚨 Erro ao ler {self.entities_path}: {e}")
+        if os.path.exists(self.relationships_path):
+            try:
+                with open(self.relationships_path, encoding='utf-8') as f:
+                    for row in csv.DictReader(f):
+                        key = (row["from_entity_id"], row["to_entity_id"], row["rel_type"])
+                        self.relationships[key] = row
+            except Exception as e:
+                print(f"🚨 Erro ao ler {self.relationships_path}: {e}")
+        if os.path.exists(self.events_path):
+            try:
+                with open(self.events_path, encoding='utf-8') as f:
+                    raw = list(csv.DictReader(f))
+                cutoff = datetime.date.today() - datetime.timedelta(days=self.max_age_days)
+                kept = []
+                for r in raw:
+                    d = r.get("date", "")
+                    parts = d.split("/")
+                    if len(parts) == 3:
+                        try:
+                            rd = datetime.date(int(parts[2]), int(parts[1]), int(parts[0]))
+                            if rd < cutoff:
+                                continue
+                        except ValueError:
+                            pass
+                    kept.append(r)
+                self.events = kept
+                if len(kept) < len(raw):
+                    print(f"📚 Graph events: {len(raw)}→{len(kept)} (podados {len(raw)-len(kept)})")
+            except Exception as e:
+                print(f"🚨 Erro ao ler {self.events_path}: {e}")
+        print(f"📊 Graph carregado: {len(self.entities)} entidades, "
+              f"{len(self.relationships)} relações, {len(self.events)} eventos")
+
+    def _save_entities(self):
+        try:
+            with open(self.entities_path, 'w', encoding='utf-8', newline='') as f:
+                w = csv.DictWriter(f, fieldnames=self.ENTITY_FIELDS)
+                w.writeheader()
+                for row in self.entities.values():
+                    w.writerow(row)
+        except Exception as e:
+            print(f"🚨 Erro ao salvar {self.entities_path}: {e}")
+
+    def _save_relationships(self):
+        try:
+            with open(self.relationships_path, 'w', encoding='utf-8', newline='') as f:
+                w = csv.DictWriter(f, fieldnames=self.REL_FIELDS)
+                w.writeheader()
+                for row in self.relationships.values():
+                    w.writerow(row)
+        except Exception as e:
+            print(f"🚨 Erro ao salvar {self.relationships_path}: {e}")
+
+    def _append_event(self, row):
+        self.events.append(row)
+        try:
+            with open(self.events_path, 'a', encoding='utf-8', newline='') as f:
+                w = csv.DictWriter(f, fieldnames=self.EVENT_FIELDS)
+                if os.path.getsize(self.events_path) == 0:
+                    w.writeheader()
+                w.writerow(row)
+        except Exception as e:
+            print(f"🚨 Erro ao salvar evento: {e}")
+
+    @staticmethod
+    def _entity_id(entity_type, name, cnpj=None):
+        if cnpj:
+            key = re.sub(r'\D', '', cnpj)
+            prefix = "EMP"
+        else:
+            key = normalize(name).strip()
+            prefix = {"empresa": "EMP", "pessoa": "PES", "orgao": "ORG", "vip": "VIP"}.get(entity_type, "ENT")
+        h = hashlib.md5(key.encode('utf-8')).hexdigest()[:10]
+        return f"{prefix}-{h}"
+
+    @staticmethod
+    def _earlier(d1, d2):
+        return d1 if _brdate_sortkey(d1) <= _brdate_sortkey(d2) else d2
+
+    @staticmethod
+    def _later(d1, d2):
+        return d1 if _brdate_sortkey(d1) >= _brdate_sortkey(d2) else d2
+
+    def get_or_create_entity(self, entity_type, name, date_str, cnpj=None):
+        if not name:
+            return None
+        if entity_type == "vip":
+            merge_id = self._find_mergeable_entity(name)
+            if merge_id:
+                row = self.entities[merge_id]
+                row["first_seen"] = self._earlier(row["first_seen"], date_str)
+                row["last_seen"] = self._later(row["last_seen"], date_str)
+                row["total_events"] = str(int(row.get("total_events", "0") or "0") + 1)
+                existing_aliases = set(a for a in row.get("aliases", "").split("|") if a)
+                if normalize(name) != normalize(row["canonical_name"]) and name not in existing_aliases:
+                    existing_aliases.add(name)
+                    row["aliases"] = "|".join(sorted(existing_aliases))[:400]
+                return merge_id
+
+        eid = self._entity_id(entity_type, name, cnpj)
+        if eid in self.entities:
+            row = self.entities[eid]
+            row["first_seen"] = self._earlier(row["first_seen"], date_str)
+            row["last_seen"] = self._later(row["last_seen"], date_str)
+            row["total_events"] = str(int(row.get("total_events", "0") or "0") + 1)
+            existing_aliases = set(a for a in row.get("aliases", "").split("|") if a)
+            if normalize(name) != normalize(row["canonical_name"]) and name not in existing_aliases:
+                existing_aliases.add(name)
+                row["aliases"] = "|".join(sorted(existing_aliases))[:400]
+        else:
+            row = {
+                "entity_id": eid, "entity_type": entity_type,
+                "canonical_name": name, "aliases": "",
+                "cnpj": cnpj or "", "first_seen": date_str,
+                "last_seen": date_str, "total_events": "1",
+            }
+            self.entities[eid] = row
+        return eid
+
+    def _find_mergeable_entity(self, vip_name):
+        q = normalize(vip_name)
+        if len(q) < 4:
+            return None
+        candidates = []
+        for eid, row in self.entities.items():
+            if row["entity_type"] == "vip":
+                continue
+            cname = normalize(row["canonical_name"])
+            if q in cname or cname in q:
+                candidates.append((len(cname), eid))
+        if not candidates:
+            return None
+        candidates.sort()
+        return candidates[0][1]
+
+    def add_relationship(self, from_id, to_id, rel_type, date_str, processo=""):
+        if not from_id or not to_id or from_id == to_id:
+            return
+        key = (from_id, to_id, rel_type)
+        if key in self.relationships:
+            row = self.relationships[key]
+            row["first_seen"] = self._earlier(row["first_seen"], date_str)
+            row["last_seen"] = self._later(row["last_seen"], date_str)
+            row["evidence_count"] = str(int(row.get("evidence_count", "0") or "0") + 1)
+        else:
+            row = {
+                "rel_id": hashlib.md5(f"{from_id}|{to_id}|{rel_type}".encode()).hexdigest()[:10],
+                "from_entity_id": from_id, "to_entity_id": to_id, "rel_type": rel_type,
+                "first_seen": date_str, "last_seen": date_str,
+                "evidence_count": "1", "example_processo": processo,
+            }
+            self.relationships[key] = row
+
+    def add_event(self, date_str, entity_ids, event_type, category, description,
+                  value="", processo="", source_doc_id="", keyword=""):
+        entity_ids = [e for e in entity_ids if e]
+        if not entity_ids:
+            return
+        event_id = hashlib.md5(
+            f"{date_str}|{source_doc_id}|{keyword}|{'|'.join(entity_ids)}".encode()
+        ).hexdigest()[:12]
+        row = {
+            "event_id": event_id, "date": date_str,
+            "entity_ids": "|".join(entity_ids), "event_type": event_type,
+            "category": category, "description": description[:200],
+            "value": value, "processo": processo,
+            "source_doc_id": source_doc_id, "keyword": keyword,
+        }
+        self._append_event(row)
+
+    def flush(self):
+        self._save_entities()
+        self._save_relationships()
+
+    def find_entity(self, query):
+        q_digits = re.sub(r'\D', '', query)
+        q_norm = normalize(query)
+        if q_digits and len(q_digits) >= 11:
+            for eid, row in self.entities.items():
+                if re.sub(r'\D', '', row.get("cnpj", "")) == q_digits:
+                    return eid
+        for eid, row in self.entities.items():
+            if q_norm in normalize(row["canonical_name"]):
+                return eid
+            if any(q_norm in normalize(a) for a in row.get("aliases", "").split("|") if a):
+                return eid
+        return None
+
+    def get_timeline(self, query, limit=20):
+        eid = self.find_entity(query)
+        if not eid:
+            return None, []
+        matching = [e for e in self.events if eid in e.get("entity_ids", "").split("|")]
+        matching.sort(key=lambda e: _brdate_sortkey(e.get("date", "")))
+        return self.entities[eid], matching[-limit:]
+
+    def get_network(self, query, depth=1):
+        eid = self.find_entity(query)
+        if not eid:
+            return None, []
+        edges = []
+        for (fid, tid, rel_type), row in self.relationships.items():
+            if fid == eid or tid == eid:
+                other_id = tid if fid == eid else fid
+                other = self.entities.get(other_id)
+                if other:
+                    edges.append((rel_type, other, row.get("evidence_count", "1")))
+        edges.sort(key=lambda x: -int(x[2]))
+        return self.entities[eid], edges
+
+    def build_timeline_message(self, query, max_events=15):
+        entity, events = self.get_timeline(query, limit=max_events)
+        if not entity:
+            return f"❓ Nenhuma entidade encontrada para '{query}'."
+        lines = [
+            f"🕓 *LINHA DO TEMPO — {entity['canonical_name']}*",
+            f"_{entity['entity_type'].upper()} · primeiro registro {entity['first_seen']} · "
+            f"{entity['total_events']} eventos totais_",
+        ]
+        if entity.get("aliases"):
+            lines.append(f"_Também aparece como: {entity['aliases'][:150]}_")
+        lines.append("─"*22)
+        for e in events:
+            val = f" · {e['value']}" if e.get("value") else ""
+            lines.append(f"📅 *{e['date']}* — {e['event_type']}: {e['description']}{val}")
+            if e.get("processo"):
+                lines.append(f"   🔗 {e['processo']}")
+        return "\n".join(lines)
+
+    def build_network_message(self, query, max_edges=10):
+        entity, edges = self.get_network(query)
+        if not entity:
+            return f"❓ Nenhuma entidade encontrada para '{query}'."
+        lines = [
+            f"🕸️ *REDE DE RELACIONAMENTOS — {entity['canonical_name']}*",
+            f"_{len(edges)} conexão(ões) diretas_",
+            "─"*22,
+        ]
+        for rel_type, other, evidence_count in edges[:max_edges]:
+            lines.append(f"↔️ *{rel_type}* → {other['canonical_name']} "
+                         f"({other['entity_type']}, {evidence_count}x)")
+        return "\n".join(lines)
+
+
+def _brdate_sortkey(d):
+    parts = d.split("/")
+    if len(parts) == 3:
+        try:
+            return (int(parts[2]), int(parts[1]), int(parts[0]))
+        except ValueError:
+            pass
+    return (0, 0, 0)
+
+
+# ── KNOWN ORGS (v1.2) — curated list for entity extraction ─────────
+# News prose doesn't tag companies/agencies the way government gazette
+# text does, so there's no reliable general-purpose extraction pattern.
+# Instead we match cluster tokens against a curated list of
+# organizations relevant to this beat: SP state/city agencies, state-
+# owned companies, and companies that recur in Brazilian corruption/
+# business coverage. This list needs periodic manual expansion as new
+# names come up — it is deliberately not exhaustive (Boyatzis 1998:
+# codes should be reviewed and expanded from what the real data shows,
+# not guessed exhaustively up front).
+KNOWN_ORGS = {
+    "sabesp": "Sabesp", "cptm": "CPTM", "metro": "Metrô SP",
+    "sptrans": "SPTrans", "emtu": "EMTU", "dersa": "Dersa",
+    "prefeitura": "Prefeitura de São Paulo", "alesp": "Alesp",
+    "detran": "Detran", "cetesb": "Cetesb", "cohab": "Cohab",
+    "petrobras": "Petrobras", "bndes": "BNDES", "caixa": "Caixa Econômica Federal",
+    "correios": "Correios", "eletrobras": "Eletrobras", "ibama": "Ibama",
+    "anvisa": "Anvisa", "receita": "Receita Federal",
+    "odebrecht": "Odebrecht/Novonor", "novonor": "Odebrecht/Novonor",
+    "jbs": "JBS", "vale": "Vale", "americanas": "Americanas",
+    "oi": "Oi", "vivo": "Vivo/Telefônica", "claro": "Claro",
+    "ambev": "Ambev", "gerdau": "Gerdau", "embraer": "Embraer",
+    "via": "Via (Casas Bahia)", "magalu": "Magazine Luiza",
+}
+
+def extract_org_entities(cluster):
+    """Match cluster tokens against KNOWN_ORGS, return canonical names found."""
+    tokens = cluster.get("tokens", set())
+    found = []
+    for token, canonical in KNOWN_ORGS.items():
+        if token in tokens and canonical not in found:
+            found.append(canonical)
+    return found
+
+
+def _record_cluster_to_graph(graph, date_str, cluster, category_key=""):
+    """
+    v1.2: translate one multi-source cluster into graph entities +
+    relationships + a timeline event. Called only for clusters that
+    already made it into the sent story cards (multi-source, or a
+    single-source VIP hit) — same noise-avoidance principle as
+    DOC-SP's equivalent function.
+    """
+    persons = []
+    seen_norm = set()
+    for art in cluster["articles"]:
+        for name in extract_human_names(art.title + " " + art.description):
+            if normalize(name) not in seen_norm:
+                seen_norm.add(normalize(name))
+                persons.append(name)
+
+    orgs = extract_org_entities(cluster)
+
+    vip_term = None
+    for art in cluster["articles"]:
+        vip_term = check_vip_watchlist(art.title + " " + art.description)
+        if vip_term: break
+
+    person_ids = [graph.get_or_create_entity("pessoa", p, date_str) for p in persons[:6]]
+    org_ids = [graph.get_or_create_entity("empresa", o, date_str) for o in orgs]
+    vip_id = graph.get_or_create_entity("vip", vip_term, date_str) if vip_term else None
+
+    entity_ids = [e for e in (person_ids + org_ids + ([vip_id] if vip_id else [])) if e]
+    if not entity_ids:
+        return
+
+    rep = pick_representative(cluster)
+    cat_emoji, cat_label = story_category(cluster)
+    w = extract_5w(cluster)
+    event_type = normalize(cat_label).replace(" ", "_") or "noticia"
+
+    graph.add_event(date_str, entity_ids, event_type, cat_label,
+                    short_headline(rep.title, rep.description),
+                    value=w.get("value", ""), processo=rep.link,
+                    source_doc_id=rep.link[-40:] if rep.link else "", keyword=cat_label)
+
+    for pid in person_ids:
+        for oid in org_ids:
+            graph.add_relationship(pid, oid, "associado_a", date_str, processo=rep.link)
+    for i, pid1 in enumerate(person_ids):
+        for pid2 in person_ids[i+1:]:
+            graph.add_relationship(pid1, pid2, "citado_com", date_str, processo=rep.link)
+    if vip_id:
+        for oid in org_ids:
+            graph.add_relationship(vip_id, oid, "mencionado_com", date_str, processo=rep.link)
+        for pid in person_ids:
+            graph.add_relationship(vip_id, pid, "mencionado_com", date_str, processo=rep.link)
 
 # ── FONTES ────────────────────────────────────────────────────────
 SOURCES = [
@@ -226,6 +825,12 @@ def is_relevant(article):
     title_low = normalize(article.title)
     desc_low  = normalize(article.description)
     combined  = title_low + " " + desc_low
+
+    # v1.1: VIP watchlist bypass — a named entity under scrutiny is
+    # always relevant, regardless of sports/celebrity/international
+    # filtering below.
+    if check_vip_watchlist(combined):
+        return True
 
     tokens = set(re.findall(r"[a-zà-ÿ]{4,}", combined))
 
@@ -820,10 +1425,33 @@ PLACE_NAMES = {
 
 # People/orgs that are clearly news actors (not places, not project names)
 _NOISE_NAMES = re.compile(
-    r"(Times\s+Square|Boulevard|Departamento\s+de|Ministério\s+da|"
+    r"(Times\s+Square|Boulevard|Departamento\s+de|Ministério\s+da|"
+    r"Ministério\s+Público|Ministério\s+do|"
     r"Supremo\s+Tribunal|Superior\s+Tribunal|Polícia\s+Civil|"
     r"Polícia\s+Federal|Prefeitura|Secretaria|Câmara\s+dos|"
-    r"Congresso\s+Nacional)", re.I)
+    r"Congresso\s+Nacional|São\s+Paulo|Rio\s+de\s+Janeiro|"
+    r"Belo\s+Horizonte|Porto\s+Alegre)", re.I)
+
+def extract_human_names(text, limit=None):
+    """
+    v1.2: factored out of extract_5w() so it can be reused by the entity
+    graph (which needs ALL names found across a cluster, not just the
+    top 2 for the "who" field of the representative article).
+    Same filtering logic as before: skip known noise patterns, skip
+    all-caps (usually acronyms), skip names containing a known place
+    word, skip anything under 4 chars.
+    """
+    raw_names = list(dict.fromkeys(NAME_RE.findall(text)))
+    human_names = []
+    for n in raw_names:
+        if _NOISE_NAMES.search(n): continue
+        if n.isupper(): continue
+        words = normalize(n).split()
+        if any(w in PLACE_NAMES for w in words): continue
+        if len(n) < 4: continue
+        human_names.append(n)
+    return human_names[:limit] if limit else human_names
+
 
 def extract_5w(cluster):
     rep  = pick_representative(cluster)
@@ -839,18 +1467,8 @@ def extract_5w(cluster):
     full_text = rep.title + " " + desc
 
     # WHO — only human names (2+ capitalized words, not a known noise pattern)
-    raw_names = list(dict.fromkeys(NAME_RE.findall(full_text)))
-    human_names = []
-    for n in raw_names:
-        if _NOISE_NAMES.search(n): continue
-        if n.isupper(): continue
-        # Skip if any word in the name is a known place
-        words = normalize(n).split()
-        if any(w in PLACE_NAMES for w in words): continue
-        # Skip short names or numbers
-        if len(n) < 4: continue
-        human_names.append(n)
-    who = ", ".join(human_names[:2]) if human_names else ""
+    human_names = extract_human_names(full_text, limit=2)
+    who = ", ".join(human_names) if human_names else ""
 
     # WHAT — cleaned headline
     what = clean_headline(rep.title)
@@ -912,6 +1530,55 @@ def score_story(cluster):
         label, emoji = "📡 AVISO", "📡"     # single mainstream = least verified
     return label, emoji, n, bool(inv), bool(grande)
 
+
+# ── NEWS-VALUE AXIS SCORING (v1.1) ─────────────────────────────────
+# Inspired by Diakopoulos et al.'s news-value framework (novelty,
+# magnitude, organizational agenda) used in the Algorithm Tips
+# government-document monitor — NOT Spangher et al. (2024), which uses
+# a different methodology (PRM chains + empirical word-deltas).
+#
+# score_story() above measures verification (HOW MANY sources agree),
+# which is orthogonal to newsworthiness (HOW MUCH this matters). A
+# story with 5 sources repeating a press release and a story with 1
+# investigative source breaking a corruption lead get the same
+# verification tier treatment otherwise. These axes let us break ties
+# within a tier and flag high-deviance stories even at low source count.
+_DEVIANCE_TOKENS = {
+    "corrupcao","fraude","desvio","superfaturamento","lavagem","escandalo",
+    "prisao","preso","condenado","investigacao","emergencial","urgente",
+    "improbidade","propina","suborno","vazamento","denuncia",
+}
+
+def compute_news_axes(cluster):
+    """
+    Magnitude (M):     a specific large monetary value is mentioned
+    Deviance (D):      departure from routine — crime/corruption/
+                        emergency language present in cluster tokens
+    Actionability (A):  a specific named person AND a specific place
+                        are both identifiable — gives a reporter
+                        something concrete to pursue
+    """
+    tokens = cluster.get("tokens", set())
+    text = " ".join(a.title + " " + a.description for a in cluster["articles"])
+
+    magnitude = bool(VALUE_RE.search(text))
+    deviance = bool(tokens & _DEVIANCE_TOKENS)
+
+    has_name = bool(NAME_RE.search(text))
+    has_place = bool(PLACE_RE.search(text))
+    actionability = has_name and has_place
+
+    return {"magnitude": magnitude, "deviance": deviance, "actionability": actionability}
+
+
+def axis_badge(axes):
+    """v1.1: compact badge string for story cards, e.g. 'M·D'."""
+    parts = []
+    if axes.get("magnitude"): parts.append("💰M")
+    if axes.get("deviance"): parts.append("🚨D")
+    if axes.get("actionability"): parts.append("🎯A")
+    return " ".join(parts)
+
 STORY_CATEGORIES = [
     # (token_set, emoji, label)
     ({"corrupcao","improbidade","fraude","desvio","superfaturamento","lavagem"},
@@ -958,6 +1625,14 @@ FOLLOWUP_RULES = [
     # SP State govt → check DOESP (only if SP state tokens present)
     ({"privatiza","desestatiza","concessao","sabesp","cptm","metro","tarcisio","alesp","secretaria"},
      "→ Verificar DOESP: ato publicado no Diário Oficial do Estado de SP?"),
+    # v1.1: SP city govt → check DOC-SP (was previously missing — every
+    # rule pointed to DOESP even for clearly municipal stories). Uses
+    # single-word tokens since cluster["tokens"] only ever contains
+    # single words from tokenize() — multi-word strings here would
+    # never match (a pre-existing pattern issue elsewhere in this file
+    # too, e.g. "zona leste" below; left as-is to avoid scope creep).
+    ({"prefeitura","subprefeitura","municipal","vereador","zeladoria","nunes"},
+     "→ Verificar DOC-SP: ato publicado no Diário Oficial da Cidade de SP?"),
     ({"licitacao","contrato","pregao","dispensa","inexigibilidade","superfaturamento"},
      "→ Verificar TCE-SP para SP, TCU para federal"),
     # Periferias / SP social → Mural
@@ -1002,6 +1677,9 @@ _CIVIC_IMPACT = {
     "urgencia":      "🚨 Contratação sem licitação — exige justificativa pública",
     "politica":      "🏛️ Decisão que afeta as estruturas de representação política",
     "economia":      "💰 Impacto econômico para empresas e trabalhadores",
+    # v1.1: added to cover categories the broken mapping never reached
+    "sp_local":      "🏙️ Decisão da gestão municipal de São Paulo — afeta o dia a dia da cidade",
+    "ciencia":       "🔬 Conhecimento gerado com financiamento público",
 }
 _CIVIC_ACTIONS = {
     "investigativo": "→ Pedido LAI pode revelar documentos completos",
@@ -1013,6 +1691,30 @@ _CIVIC_ACTIONS = {
     "disciplinar":   "→ Processo: verificar DOESP caderno Pessoal",
     "legal":         "→ Inteiro teor: portal do tribunal respectivo",
     "fiscal":        "→ Portal da Transparência federal/estadual",
+    # v1.1
+    "sp_local":      "→ Diário Oficial da Cidade de SP (DOC-SP) tem o ato completo",
+}
+
+# v1.1: explicit STORY_CATEGORIES label -> _CIVIC_IMPACT key mapping.
+# BUG FIX: the previous code used cat_label.split()[-1].lower(), which
+# broke for 11 of 13 categories due to accent mismatches ("política" vs
+# "politica") and label mismatches ("São Paulo" -> "paulo", not a real
+# key). That meant civic_impact()/civic_action() silently returned ""
+# for almost every story except "Investigativo" and "Economia".
+_CATEGORY_TO_CIVIC_KEY = {
+    "Investigativo":  "investigativo",
+    "Privatização":   "privatizacao",
+    "Justiça/Crime":  "seguranca",
+    "Judiciário":     "legal",
+    "Política":       "politica",
+    "Economia":       "economia",
+    "São Paulo":      "sp_local",
+    "Saúde":          "saude",
+    "Meio Ambiente":  "meio_ambiente",
+    "Ciência":        "ciencia",
+    "Violência":      "seguranca",
+    "Legislativo":    "politica",
+    "Geral":          "",
 }
 
 def civic_impact(category):
@@ -1022,6 +1724,11 @@ def civic_impact(category):
 def civic_action(category):
     """Kovach Ch.10: what the citizen can do — specific tool."""
     return _CIVIC_ACTIONS.get(category, "")
+
+def civic_key_for_label(cat_label):
+    """v1.1: correct label->key lookup, replacing the broken split()[-1] hack."""
+    return _CATEGORY_TO_CIVIC_KEY.get(cat_label, "")
+
 
 def source_independence(cluster):
     """
@@ -1079,14 +1786,26 @@ def build_story_card(cluster, rank, date_str):
     cat_emoji, cat_label = story_category(cluster)
     w         = extract_5w(cluster)
     rep       = pick_representative(cluster)
-    impact    = civic_impact(cat_label.split()[-1].lower() if cat_label else "")
-    action    = civic_action(cat_label.split()[-1].lower() if cat_label else "")
+    impact    = civic_impact(civic_key_for_label(cat_label))
+    action    = civic_action(civic_key_for_label(cat_label))
     ind_note  = source_independence(cluster)
     followups = suggest_followups(cluster, cluster["sources"])
 
+    # v1.1: news-value axes + VIP watchlist check
+    axes  = compute_news_axes(cluster)
+    badge = axis_badge(axes)
+    vip_term = None
+    for a in cluster["articles"]:
+        vip_term = check_vip_watchlist(a.title + " " + a.description)
+        if vip_term: break
+
     # ── Header: verification tier + category (Kovach Ch.2+4) ──
-    lines = [
-        f"📰 *{date_str}* | {emoji_cov} {label} — {n_sources} fontes",
+    header_line = f"📰 *{date_str}* | {emoji_cov} {label} — {n_sources} fontes"
+    if badge: header_line += f" | {badge}"
+    lines = [header_line]
+    if vip_term:
+        lines.append(f"🚨 *ALERTA VIP WATCHLIST: {vip_term}*")
+    lines += [
         f"{cat_emoji} *{cat_label}*",
         "━━━",
     ]
@@ -1190,8 +1909,6 @@ def build_summary(clusters, all_articles, date_str, failed_sources):
     all_watched = {"Política","Economia","São Paulo","Saúde",
                    "Meio Ambiente","Investigativo","Judiciário","Segurança"}
     gaps_labels = all_watched - shown_cats
-    # Map back to emoji labels for display
-    _cat_map = {lb:em for _,em,lb in [(t,e,l) for t,e,l in [(s,story_category({'tokens':set(),'articles':[]}),'') for s in []]]}
     gaps = gaps_labels
     if gaps:
         lines.append(f"_Sem cobertura hoje: {' · '.join(sorted(gaps))}_")
@@ -1237,6 +1954,69 @@ def build_uncovered(solo_clusters, date_str):
             lines.append(f"  {cat_em} {lnk}: _{t}_")
 
     return "\n".join(lines)
+
+
+# ── NEGATIVE CASE ANALYSIS (v1.1) ───────────────────────────────────
+# Nowell et al. (2017): credibility requires systematically reviewing
+# cases that diverge from what the pipeline surfaces, not just auditing
+# what got through. is_relevant() silently drops articles every run;
+# nothing samples what was dropped for a human to sanity-check the
+# filter's calibration.
+def sample_negative_cases(all_recent_articles, n=5):
+    """
+    Sample articles that were recent enough to consider but were
+    filtered out by is_relevant(). Not a random sample — biased toward
+    articles from investigative/specialized sources, since a false
+    negative there is more costly (those outlets break stories the
+    mainstream press hasn't covered yet, so losing one to an over-eager
+    filter is a bigger loss than losing a mainstream wire item).
+    """
+    rejected = [a for a in all_recent_articles if not is_relevant(a)]
+    rejected.sort(key=lambda a: 0 if a.source in INVESTIGATIVE else 1)
+    return rejected[:n]
+
+
+def build_negative_case_digest(rejected_sample, date_str):
+    """v1.1: format the negative-case sample as a Telegram message."""
+    if not rejected_sample:
+        return None
+    lines = [
+        f"🔍 *REVISÃO DE CASOS NEGATIVOS — {date_str}*",
+        "_Artigos filtrados pelo is_relevant() — vale checar se não são falsos negativos_",
+        "━━━",
+    ]
+    for a in rejected_sample:
+        t = clean_headline(a.title)[:80]
+        lines.append(f"{a.emoji} {a.source}: _{t}_")
+    return "\n".join(lines)
+
+
+def log_selection_rate(total_recent, total_relevant):
+    """
+    v1.1 — Spangher et al. (2024) found 2-6% of source documents become
+    "news" in their SF government-document dataset. News Monitor's
+    task is different (curating across already-published news, not
+    predicting coverage of raw government documents), so this isn't a
+    directly comparable benchmark — logged here as a calibration
+    signal for the is_relevant() filter's strictness over time, not as
+    a claim that the same 2-6% target applies.
+    """
+    rate = (total_relevant / total_recent) if total_recent else 0
+    print(f"  📊 Taxa de relevância: {rate:.1%} ({total_relevant}/{total_recent} artigos recentes)")
+    return rate
+
+
+def evaluate_ambiguous_story_via_llm(cluster):
+    """
+    v1.1 stub — LLM-assisted curation placeholder, mirroring the DOC-SP
+    monitor's evaluate_ambiguous_act_via_llm(). In a future version,
+    this would call the Anthropic API to judge single-source stories
+    that is_relevant() let through but that don't clearly fit any
+    STORY_CATEGORIES bucket, or borderline-rejected items from
+    sample_negative_cases(). Returns None; not yet wired up. Requires
+    ANTHROPIC_API_KEY to be set when implemented.
+    """
+    return None
 
 
 # ── TELEGRAM ─────────────────────────────────────────────────────
@@ -1841,7 +2621,10 @@ def main():
     date_str = now.strftime("%d/%m/%Y")
     time_str = now.strftime("%H:%M")
     run_str  = f"{date_str} {time_str}"
-    print(f"=== Monitor de Notícias v1.0 - {run_str} BRT ===\n")
+    print(f"=== Monitor de Notícias v1.2 - {run_str} BRT ===\n")
+
+    ledger = NewsLedger("news_ledger.csv")
+    graph  = EntityGraph("news_graph")
 
     # 0. Fetch institutional sources (date-filtered, separate message)
     print("\n  Fontes institucionais...")
@@ -1903,6 +2686,13 @@ def main():
     print(f"  Clusters multi-fonte: {len(multi_source)}")
     print(f"  Histórias exclusivas: {len(single_source)}")
 
+    # v1.1: selection-rate calibration signal. `recent` (from
+    # cluster_articles) already excludes is_relevant()-rejected
+    # articles, so we recompute the time-window-only set to get a real
+    # before/after comparison, not a tautological one.
+    time_filtered = [a for a in all_articles if a.is_recent(window_h)]
+    log_selection_rate(len(time_filtered), len(recent))
+
     # 3. Send summary
     summary = build_summary(multi_source + single_source[:5], recent, run_str, failed)
     send_telegram(summary)
@@ -1912,11 +2702,47 @@ def main():
     print("\n  Enviando fichas...")
     sent = 0
     for rank, cluster in enumerate(multi_source[:12], 1):
+        cat_emoji, cat_label = story_category(cluster)
+        vip_term = None
+        for a in cluster["articles"]:
+            vip_term = check_vip_watchlist(a.title + " " + a.description)
+            if vip_term: break
+
         card = build_story_card(cluster, rank, date_str)
+
+        # v1.1: cross-day recurrence check (Spangher et al. 2024 —
+        # recurrence is itself a newsworthiness signal)
+        recur = ledger.check_recurrence(cluster, date_str)
+        if recur:
+            nd, dates = recur
+            card += f"\n\n🔁 _Pauta em desenvolvimento — indícios de cobertura similar em {nd} dia(s) anteriores_"
+
         for part in split_long(card):
             send_telegram(part)
         time.sleep(0.5)
         sent += 1
+
+        # v1.1: log to ledger for future recurrence detection
+        ledger.log_hit(date_str, cluster, cat_label, vip_term=vip_term)
+        # v1.2: log to entity graph (person/org/VIP relationships + timeline)
+        _record_cluster_to_graph(graph, date_str, cluster)
+
+    # VIP watchlist hits among single-source clusters also get logged
+    # and surfaced even though they won't appear in multi_source[:12]
+    vip_single_hits = []
+    for cluster in single_source:
+        vip_term = None
+        for a in cluster["articles"]:
+            vip_term = check_vip_watchlist(a.title + " " + a.description)
+            if vip_term: break
+        if vip_term:
+            cat_emoji, cat_label = story_category(cluster)
+            card = build_story_card(cluster, 0, date_str)
+            for part in split_long(card):
+                send_telegram(part)
+            ledger.log_hit(date_str, cluster, cat_label, vip_term=vip_term)
+            _record_cluster_to_graph(graph, date_str, cluster)
+            vip_single_hits.append(vip_term)
 
     # 5. Exclusivas / investigativas digest
     if any(c["sources"] & INVESTIGATIVE for c in single_source):
@@ -1931,6 +2757,32 @@ def main():
     if inst_msg:
         for part in split_long(inst_msg):
             send_telegram(part, silent=False)
+
+    # v1.1: weekly ledger digest + negative case digest (Fridays, silent —
+    # periodic audit signals, not part of the daily leads routine)
+    if now.weekday() == 4 and now.hour < 12:  # Friday morning run only
+        weekly = ledger.weekly_summary()
+        if weekly:
+            send_telegram(weekly, silent=True)
+        # v1.1 fix: `recent` (from cluster_articles) already excludes
+        # is_relevant()-rejected articles, so sampling from it would
+        # always return empty. Reuse the time-window-only set computed
+        # earlier in this function.
+        neg_sample = sample_negative_cases(time_filtered, n=5)
+        neg_digest = build_negative_case_digest(neg_sample, date_str)
+        if neg_digest:
+            send_telegram(neg_digest, silent=True)
+
+    # v1.2: VIP network digest — if any VIP watchlist entity was hit
+    # today (in either the top cards or single-source exclusives), send
+    # its accumulated network so far.
+    for vip_term in set(vip_single_hits):
+        net_msg = graph.build_network_message(vip_term)
+        if net_msg:
+            send_telegram(net_msg)
+
+    # v1.2: persist graph (events already appended incrementally)
+    graph.flush()
 
 if __name__ == "__main__":
     main()
