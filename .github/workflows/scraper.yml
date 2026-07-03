@@ -8,6 +8,13 @@ on:
     - cron: '0 23 * * 1-5'  # 20:00 BRT
   workflow_dispatch:
 
+# Required to commit news_ledger.csv and the news_graph_*.csv files
+# back to the repo. Without this, the bot has no persistent memory —
+# every run starts from zero (this was missing from the original v1.0
+# workflow pasted in chat; the ledger/graph features need it).
+permissions:
+  contents: write
+
 jobs:
   monitor:
     runs-on: ubuntu-latest
@@ -32,3 +39,17 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      # Commits the ledger and the three entity-graph files after each
+      # run. news_graph_entities.csv / news_graph_relationships.csv are
+      # rewritten whole each run (bounded by unique entity count);
+      # news_graph_events.csv grows by append, same pattern as
+      # news_ledger.csv.
+      - name: Commit and push ledger and graph
+        run: |
+          git config --global user.name "News Monitor Bot"
+          git config --global user.email "bot@example.com"
+          git add news_ledger.csv news_graph_entities.csv news_graph_relationships.csv news_graph_events.csv
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update news ledger and entity graph"
+          git push
