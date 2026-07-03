@@ -9,16 +9,18 @@ on:
   workflow_dispatch:
 
 # Required to commit news_ledger.csv and the news_graph_*.csv files
-# back to the repo. Without this, the bot has no persistent memory —
-# every run starts from zero (this was missing from the original v1.0
-# workflow pasted in chat; the ledger/graph features need it).
+# back to the repo.
 permissions:
   contents: write
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # bumped to 40 minutes — source count grew from 12 (v1.0) to 39 (v1.4)
+    # (12 -> 39), and several of the new local/regional sources are
+    # best-effort RSS guesses that may fall through to the slower
+    # Playwright HTML-scraping path.
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -41,11 +43,6 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      # Commits the ledger and the three entity-graph files after each
-      # run. news_graph_entities.csv / news_graph_relationships.csv are
-      # rewritten whole each run (bounded by unique entity count);
-      # news_graph_events.csv grows by append, same pattern as
-      # news_ledger.csv.
       - name: Commit and push ledger and graph
         run: |
           git config --global user.name "News Monitor Bot"
