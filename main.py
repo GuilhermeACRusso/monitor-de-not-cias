@@ -1,5 +1,5 @@
 """
-Monitor de Notícias v1.1 - Análise de cobertura jornalística brasileira
+Monitor de Notícias v1.4 - Análise de cobertura jornalística brasileira
 =======================================================================
 Fontes: G1, Folha, O Globo, Estadão, Metrópoles, Intercept, Agência Mural,
         A Pública, Fiocruz, Jornal USP, Agência Galão
@@ -626,66 +626,248 @@ def _record_cluster_to_graph(graph, date_str, cluster, category_key=""):
 
 # ── FONTES ────────────────────────────────────────────────────────
 SOURCES = [
-    # Grande imprensa
-    {"name": "G1",           "emoji": "🔵", "tier": "grande",
+    # ── Grande imprensa (scope: nacional, except G1-SP which is local) ──
+    {"name": "G1",           "emoji": "🔵", "tier": "grande", "scope": "nacional",
      "rss":  "https://g1.globo.com/dynamo/ultimas-noticias/rss2.xml",
      "home": "https://g1.globo.com/",
      "fmt":  "globo_json"},   # Globo uses JSON, not XML
-    {"name": "G1-SP",        "emoji": "🔵", "tier": "grande",
+    {"name": "G1-SP",        "emoji": "🔵", "tier": "grande", "scope": "local",
      "rss":  "https://g1.globo.com/dynamo/sao-paulo/rss2.xml",
      "home": "https://g1.globo.com/sp/sao-paulo/",
      "fmt":  "globo_json"},
-    {"name": "Folha",        "emoji": "🟠", "tier": "grande",
+    {"name": "Folha",        "emoji": "🟠", "tier": "grande", "scope": "nacional",
      "rss":  "https://feeds.folha.uol.com.br/emcimadahora/rss091.xml",
      "home": "https://www1.folha.uol.com.br/ultimas-noticias/",
      "fmt":  "rss"},
-    {"name": "Estadão",      "emoji": "🔴", "tier": "grande",
+    {"name": "Estadão",      "emoji": "🔴", "tier": "grande", "scope": "nacional",
      "rss":  "https://www.estadao.com.br/arc/outboundfeeds/rss/?outputType=xml",
      "rss2": "https://www.estadao.com.br/ultimas/",
      "home": "https://www.estadao.com.br/ultimas/",
      "fmt":  "rss"},
-    {"name": "O Globo",      "emoji": "⚫", "tier": "grande",
+    {"name": "O Globo",      "emoji": "⚫", "tier": "grande", "scope": "nacional",
      "rss":  "https://oglobo.globo.com/arc/outboundfeeds/rss/?outputType=xml",
      "rss2": "https://oglobo.globo.com/ultimas-noticias/",
      "home": "https://oglobo.globo.com/ultimas-noticias/",
      "fmt":  "rss"},
-    {"name": "Metrópoles",   "emoji": "🟣", "tier": "grande",
+    {"name": "Metrópoles",   "emoji": "🟣", "tier": "grande", "scope": "nacional",
      "rss":  "https://www.metropoles.com/feed/",
      "home": "https://www.metropoles.com/",
      "fmt":  "rss"},
-    # Investigativa / especializada
-    {"name": "Intercept",    "emoji": "🔷", "tier": "investigativa",
+    # ── Investigativa / especializada (scope: nacional, except Ag. Mural = local) ──
+    {"name": "Intercept",    "emoji": "🔷", "tier": "investigativa", "scope": "nacional",
      "rss":  "https://www.intercept.com.br/feed/",
      "home": "https://www.intercept.com.br/",
      "fmt":  "rss"},
-    {"name": "A Pública",    "emoji": "🟢", "tier": "investigativa",
+    {"name": "A Pública",    "emoji": "🟢", "tier": "investigativa", "scope": "nacional",
      "rss":  "https://apublica.org/feed/",
      "home": "https://apublica.org/",
      "fmt":  "rss"},
-    {"name": "Ag. Mural",    "emoji": "🟡", "tier": "investigativa",
+    {"name": "Ag. Mural",    "emoji": "🟡", "tier": "investigativa", "scope": "local",
      "rss":  "https://agenciamural.org.br/wp-json/wp/v2/posts?per_page=25&orderby=date&order=desc&_fields=title,link,excerpt,date",
      "rss2": "https://agenciamural.org.br/feed/",
      "rss3": "https://agenciamural.org.br/noticias/",
      "home": "https://agenciamural.org.br/noticias/",
      "fmt":  "wp_api"},
-    # Científica / acadêmica
-    {"name": "Fiocruz",      "emoji": "🏥", "tier": "cientifica",
+    # ── Científica / acadêmica (scope: nacional, except Jornal USP = local) ──
+    {"name": "Fiocruz",      "emoji": "🏥", "tier": "cientifica", "scope": "nacional",
      "rss":  "https://agencia.fiocruz.br/feed/",
      "rss2": "https://agencia.fiocruz.br/wp-json/wp/v2/posts?per_page=25&orderby=date&order=desc&_fields=title,link,excerpt,date",
      "rss3": "https://agencia.fiocruz.br/noticias",
      "home": "https://agencia.fiocruz.br/",
      "fmt":  "rss"},
-    {"name": "Jornal USP",   "emoji": "🎓", "tier": "cientifica",
+    {"name": "Jornal USP",   "emoji": "🎓", "tier": "cientifica", "scope": "local",
      "rss":  "https://jornal.usp.br/feed/",
      "home": "https://jornal.usp.br/",
      "fmt":  "rss"},
-    {"name": "Ag. Galão",    "emoji": "🎭", "tier": "cultural",
+    {"name": "Ag. Galão",    "emoji": "🎭", "tier": "cultural", "scope": "nacional",
      "rss":  "https://agenciagalo.com/wp-json/wp/v2/posts?per_page=25&orderby=date&order=desc&_fields=title,link,excerpt,date",
      "rss2": "https://agenciagalo.com/feed/",
      "rss3": "https://agenciagalo.com/",
      "home": "https://agenciagalo.com/",
      "fmt":  "wp_api"},
+
+    # ══════════════════════════════════════════════════════════════
+    # v1.3: LOCAL — São Paulo capital neighborhoods (scope: local)
+    # ══════════════════════════════════════════════════════════════
+    # These are small, independently-run regional outlets. RSS URLs
+    # below are best-effort (the standard WordPress /feed/ pattern,
+    # since all four sites run on WordPress/Elementor per their page
+    # markup) — NOT individually verified against live feed output.
+    # The existing fetch_rss() architecture already tries multiple URL
+    # candidates then falls back to Playwright HTML scraping of the
+    # "home" page if RSS fails, so a wrong guess degrades gracefully
+    # rather than silently losing the source.
+    {"name": "ZL Notícias",   "emoji": "🌇", "tier": "local", "scope": "local",
+     "rss":  "https://zlnoticias.com.br/feed/",
+     "home": "https://zlnoticias.com.br/",
+     "fmt":  "rss"},   # Zona Leste — ~4M habitantes
+    {"name": "SP Zona Sul",   "emoji": "🌆", "tier": "local", "scope": "local",
+     "rss":  "https://jornalzonasul.com.br/feed/",
+     "home": "https://jornalzonasul.com.br/",
+     "fmt":  "rss"},   # Zona Sul
+    {"name": "Notícias de Itaquera", "emoji": "🏙️", "tier": "local", "scope": "local",
+     "rss":  "https://www.noticiasdeitaquera.com.br/feed/",
+     "home": "https://www.noticiasdeitaquera.com.br/noticias/",
+     "fmt":  "rss"},   # Itaquera e região (Zona Leste)
+    {"name": "Infoleste",     "emoji": "🌉", "tier": "local", "scope": "local",
+     "rss":  "https://infoleste.com.br/feed/",
+     "home": "https://infoleste.com.br/",
+     "fmt":  "rss"},   # Zona Leste — imprensa comunitária
+
+    # ══════════════════════════════════════════════════════════════
+    # v1.3: LOCAL — Região Metropolitana de São Paulo (Grande SP)
+    # ══════════════════════════════════════════════════════════════
+    # Grouped under the same "local" scope as SP-capital neighborhoods
+    # per your explicit framing: "local news sites that refer to
+    # neighborhoods in São Paulo, AND the cities in the metropolitan
+    # area" — both are "closest to me" for a São Paulo capital-based
+    # journalist, as distinct from "estadual" (rest of SP state).
+    {"name": "Diário do Grande ABC", "emoji": "🏭", "tier": "local", "scope": "local",
+     "rss":  "https://www.dgabc.com.br/rss",
+     "rss2": "https://www.dgabc.com.br/Rss/UltimasNoticias",
+     "home": "https://www.dgabc.com.br/",
+     "fmt":  "rss"},   # Santo André, São Bernardo, São Caetano, Diadema, Mauá,
+                        # Ribeirão Pires, Rio Grande da Serra — maior jornal regional do país
+    {"name": "Repórter Diário", "emoji": "🏗️", "tier": "local", "scope": "local",
+     "rss":  "https://www.reporterdiario.com.br/feed/",
+     "home": "https://www.reporterdiario.com.br/",
+     "fmt":  "rss"},   # ABC — segunda fonte para checagem cruzada
+    {"name": "Guarulhos Hoje", "emoji": "✈️", "tier": "local", "scope": "local",
+     "rss":  "https://www.guarulhoshoje.com.br/feed/",
+     "home": "https://www.guarulhoshoje.com.br/",
+     "fmt":  "rss"},   # Guarulhos (2ª maior cidade da Grande SP)
+    {"name": "Folha Metropolitana", "emoji": "🚇", "tier": "local", "scope": "local",
+     "rss":  "https://www.fmetropolitana.com.br/feed/",
+     "home": "https://www.fmetropolitana.com.br/",
+     "fmt":  "rss"},   # Guarulhos — segunda fonte
+
+    # ══════════════════════════════════════════════════════════════
+    # v1.3: INTERNACIONAL — wire services and major outlets by region
+    # ══════════════════════════════════════════════════════════════
+    # Selected for (a) major economic/political ties to Brazil, and
+    # (b) general international relevance, spanning continents. Most
+    # URLs below are independently verified against live RSS output
+    # (see chat for research notes); CGTN and Infobae are best-effort
+    # (site loads via JS-heavy delivery, relies on Playwright fallback).
+    {"name": "BBC World",     "emoji": "🇬🇧", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://feeds.bbci.co.uk/news/world/rss.xml",
+     "home": "https://www.bbc.com/news/world",
+     "fmt":  "rss"},
+    {"name": "BBC América Latina", "emoji": "🌎", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://feeds.bbci.co.uk/news/world/latin_america/rss.xml",
+     "home": "https://www.bbc.com/news/world/latin_america",
+     "fmt":  "rss"},
+    {"name": "BBC África",    "emoji": "🌍", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://feeds.bbci.co.uk/news/world/africa/rss.xml",
+     "home": "https://www.bbc.com/news/world/africa",
+     "fmt":  "rss"},
+    {"name": "BBC Ásia",      "emoji": "🌏", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://feeds.bbci.co.uk/news/world/asia/rss.xml",
+     "home": "https://www.bbc.com/news/world/asia",
+     "fmt":  "rss"},
+    {"name": "Al Jazeera",    "emoji": "🕌", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://www.aljazeera.com/xml/rss/all.xml",
+     "home": "https://www.aljazeera.com/",
+     "fmt":  "rss"},   # Oriente Médio + cobertura global
+    {"name": "DW",            "emoji": "🇩🇪", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://rss.dw.com/rdf/rss-en-top",
+     "home": "https://www.dw.com/en/top-stories/s-9097",
+     "fmt":  "rss"},   # Alemanha/Europa — maior economia da UE
+    {"name": "France24",      "emoji": "🇫🇷", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://www.france24.com/en/rss",
+     "home": "https://www.france24.com/en/",
+     "fmt":  "rss"},
+    {"name": "CGTN",          "emoji": "🇨🇳", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://www.cgtn.com/subscribe/rss/world.xml",
+     "home": "https://www.cgtn.com/world",
+     "fmt":  "rss"},   # China — maior parceiro comercial do Brasil
+    {"name": "Infobae",       "emoji": "🇦🇷", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://www.infobae.com/arc/outboundfeeds/rss/",
+     "home": "https://www.infobae.com/america/",
+     "fmt":  "rss"},   # Argentina — Mercosul, vizinho mais próximo
+    {"name": "ABC News AU",   "emoji": "🇦🇺", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://www.abc.net.au/news/feed/51120/rss.xml",
+     "home": "https://www.abc.net.au/news/world",
+     "fmt":  "rss"},   # Austrália — cobertura Oceania
+    {"name": "UPI World",     "emoji": "🌐", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://rss.upi.com/news/tn_int.rss",
+     "home": "https://www.upi.com/Top_News/World-News/",
+     "fmt":  "rss"},   # agência de notícias EUA — cobertura global
+
+    # ══════════════════════════════════════════════════════════════
+    # v1.4: BRASIL — mídia alternativa (scope: nacional)
+    # ══════════════════════════════════════════════════════════════
+    # Requested by name: Opera Mundi and Brasil de Fato, both real,
+    # active, editorially independent from the "grande imprensa"
+    # conglomerates already in this list (Globo, Folha/UOL group,
+    # Estadão). Their content will often get classified as
+    # "internacional" by geo_scope() at the per-story level (correct —
+    # a Brazilian outlet covering Gaza should show in that bucket),
+    # even though the source itself is Brazilian, hence scope=nacional.
+    {"name": "Opera Mundi",   "emoji": "🌐", "tier": "alternativa", "scope": "nacional",
+     "rss":  "https://operamundi.uol.com.br/feed",
+     "home": "https://operamundi.uol.com.br/",
+     "fmt":  "rss"},   # fundado 2008, cobertura internacional, editorial
+                        # independente e progressista, sem vínculo com
+                        # grandes grupos econômicos
+    {"name": "Brasil de Fato", "emoji": "✊", "tier": "alternativa", "scope": "nacional",
+     "rss":  "https://www.brasildefato.com.br/rss2.xml",
+     "rss2": "https://www.brasildefato.com.br/feed",
+     "home": "https://www.brasildefato.com.br/",
+     "fmt":  "rss"},   # fundado por movimentos populares em 2003 durante
+                        # o Fórum Social Mundial em Porto Alegre
+
+    # ══════════════════════════════════════════════════════════════
+    # v1.4: AMÉRICA LATINA — rede de jornalismo investigativo
+    # independente (scope: internacional)
+    # ══════════════════════════════════════════════════════════════
+    # These outlets are part of a documented, real network of
+    # independent Latin American investigative journalism (cited
+    # together in ICIJ's Panama/Paradise Papers media-partner lists and
+    # in academic literature on regional media capture) — deliberately
+    # not the "hegemonic" corporate press (Clarín, Televisa, O Globo-
+    # style conglomerates). Several operate under real political
+    # pressure: El Faro relocated its newsroom from El Salvador to
+    # Costa Rica in 2023 due to state persecution.
+    {"name": "El Faro",       "emoji": "🇸🇻", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://elfaro.net/en/rss",
+     "home": "https://elfaro.net/en",
+     "fmt":  "rss"},   # El Salvador — investigativo, relocado para Costa
+                        # Rica em 2023 por perseguição do governo Bukele
+    {"name": "CIPER Chile",   "emoji": "🇨🇱", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://www.ciperchile.cl/feed/",
+     "home": "https://www.ciperchile.cl/",
+     "fmt":  "rss"},   # Chile — jornalismo investigativo sem fins lucrativos
+    {"name": "Ojo Público",   "emoji": "🇵🇪", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://ojo-publico.com/feed",
+     "home": "https://ojo-publico.com/",
+     "fmt":  "rss"},   # Peru — investigativo, dados abertos
+
+    # ══════════════════════════════════════════════════════════════
+    # v1.4: ESTADOS UNIDOS — imprensa alternativa/independente
+    # (scope: internacional)
+    # ══════════════════════════════════════════════════════════════
+    # Explicitly non-corporate US press, as distinct from the
+    # hegemonic broadcast/cable landscape (CNN/Fox/NYT-style). "The
+    # Intercept" here is the US edition (theintercept.com) — a
+    # different outlet/domain from "Intercept" (intercept.com.br,
+    # Brazilian edition) already in this list.
+    {"name": "ProPublica",    "emoji": "🇺🇸", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://www.propublica.org/feeds/propublica/main",
+     "home": "https://www.propublica.org/",
+     "fmt":  "rss"},   # EUA — jornalismo investigativo sem fins lucrativos,
+                        # fundado 2007
+    {"name": "The Intercept (US)", "emoji": "🗽", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://theintercept.com/feed/",
+     "home": "https://theintercept.com/",
+     "fmt":  "rss"},   # EUA — vigilância, segurança nacional, política —
+                        # edição distinta do Intercept Brasil
+    {"name": "Democracy Now!", "emoji": "📢", "tier": "internacional", "scope": "internacional",
+     "rss":  "https://www.democracynow.org/democracynow.rss",
+     "home": "https://www.democracynow.org/",
+     "fmt":  "rss"},   # EUA — noticiário diário independente, Amy Goodman
 ]
+
 
 
 # ── STOPWORDS E NORMALIZAÇÃO ─────────────────────────────────────
@@ -713,8 +895,35 @@ _KEEP_TOKENS = {
     "concessao","licitacao","contrato","corrupcao","desvio","fraude",
     # São Paulo (cidade e estado)
     "paulo","paulista","paulistano","tarcisio","alesp","estadual","capital","subprefeitura",
+    # v1.3: bairros e zonas da capital paulista — extends the SAME "São Paulo"
+    # geographic category above, not a new editorial category. Needed so
+    # purely local neighborhood news (which often has no "politica"/"economia"
+    # token) still passes the topic filter. Single-word tokens only — this
+    # set is checked via token-set intersection (see tokenize()), which
+    # extracts individual words, so multi-word names like "Santo André"
+    # would never match here and are instead handled by substring checks
+    # in geo_scope() below.
+    "pinheiros","moema","tatuape","itaquera","santana","mooca","butanta","lapa",
+    "ipiranga","liberdade","penha","sacoma","jabaquara","brasilandia","perus",
+    "cambuci","consolacao","aricanduva","sapopemba","guaianases","ermelino",
+    "freguesia","tucuruvi","periferia","periferias",
+    # v1.3: cidades da Região Metropolitana de São Paulo (Grande SP) —
+    # single-word city names only; multi-word ones (Santo André, São
+    # Bernardo, etc.) are matched by substring in geo_scope() instead.
+    "guarulhos","osasco","diadema","maua","barueri","cotia","carapicuiba",
+    "suzano","itapevi","aruja","poa","itaquaquecetuba",
+    # v1.3: cidades do interior/litoral paulista (single-word only; see
+    # geo_scope() for multi-word interior city matching)
+    "campinas","santos","sorocaba","bauru","piracicaba","jundiai","franca",
+    "marilia","araraquara",
     # Governo federal
     "lula","planalto","stf","supremo","tcm","tcu","tce","ministerio","federal",
+    # v1.3: política internacional — extends the existing international-
+    # politics interest (already named as a category to keep), covers
+    # conflict/diplomacy vocabulary that pure "politica"/"economia" tokens
+    # don't reliably catch (e.g. war coverage, treaties, summits).
+    "guerra","conflito","invasao","sancao","cupula","tratado","diplomacia",
+    "embaixada","onu","otan","brics","geopolitica","refugiado","fronteira",
     # Ciência e pesquisa
     "pesquisa","ciencia","cientifico","estudo","universidade","descoberta","tecnologia",
     "inovacao","academico","academica","publicado","revista","revista","cientifico",
@@ -820,6 +1029,110 @@ _BRAZIL_TOKENS = {
     "feminicidio","femicidio","mulher",
 }
 
+# v1.3/v1.4: sources exempted from the "must have a Brazil angle"
+# requirement in is_relevant() below — same principle as the
+# pre-existing investigative-outlet exemption, extended to the
+# international wire sources (v1.3) and to Opera Mundi/Brasil de Fato
+# (v1.4), whose entire editorial purpose is covering stories that
+# legitimately have no Brazil connection (e.g. "China's exports grow
+# 5%", "settlers in the West Bank"). Both are scope="nacional" (they're
+# Brazilian outlets) so they don't get auto-included by the scope
+# check below — added explicitly here instead.
+_ALWAYS_RELEVANT_SOURCES = {
+    "Intercept", "A Pública", "Ag. Mural", "Fiocruz",
+    "Opera Mundi", "Brasil de Fato",
+} | {
+    s["name"] for s in SOURCES if s.get("scope") == "internacional"
+}
+
+# ── GEOGRAPHIC SCOPE (v1.3) ─────────────────────────────────────────
+# Purely about WHERE a story is set — local / estadual / nacional /
+# internacional — orthogonal to story_category() (WHAT it's about).
+# Uses substring matching on the full normalized text rather than
+# token-set intersection, because most place names here are multi-word
+# ("Santo André", "São Bernardo do Campo") and tokenize()'s single-word
+# extraction would never match them via set intersection (the same
+# pattern issue noted elsewhere in this file, e.g. FOLLOWUP_RULES).
+_LOCAL_SP_PLACES = [
+    # Bairros/zonas da capital (single AND multi-word forms)
+    "pinheiros","moema","tatuape","itaquera","santana","mooca","butanta",
+    "lapa","ipiranga","liberdade","penha","sacoma","jabaquara","brasilandia",
+    "perus","cambuci","consolacao","aricanduva","sapopemba","guaianases",
+    "ermelino","freguesia do o","tucuruvi","vila mariana","vila prudente",
+    "vila formosa","vila matilde","são miguel paulista","cidade tiradentes",
+    "itaim paulista","zona leste","zona sul","zona norte","zona oeste",
+    "centro de são paulo","subprefeitura",
+    # Região Metropolitana (Grande SP) — single AND multi-word city names
+    "guarulhos","osasco","diadema","maua","barueri","cotia","carapicuiba",
+    "suzano","itapevi","aruja","itaquaquecetuba","santo andre","sao bernardo",
+    "sao caetano","taboao da serra","mogi das cruzes","embu das artes",
+    "franco da rocha","itapecerica da serra","ribeirao pires",
+    "rio grande da serra","ferraz de vasconcelos","grande abc","abc paulista",
+    "grande sao paulo","regiao metropolitana",
+]
+_ESTADUAL_SP_PLACES = [
+    # Interior/litoral paulista — outside the metro region
+    "campinas","santos","sorocaba","bauru","piracicaba","jundiai","franca",
+    "marilia","araraquara","ribeirao preto","sao jose dos campos",
+    "sao jose do rio preto","presidente prudente","litoral paulista",
+    "baixada santista","vale do paraiba","interior paulista","interior de sao paulo",
+    "tarcisio","alesp","governo do estado","governo estadual","secretaria estadual",
+]
+
+# v1.4: Brazil-SPECIFIC signal for geo_scope's internacional/nacional
+# split — deliberately a stricter subset of _BRAZIL_TOKENS. Found via
+# testing: _BRAZIL_TOKENS includes generic institutional words like
+# "governo", "presidente", "ministro" that apply to ANY country's
+# government, not just Brazil's — an El Faro story about "governo de
+# El Salvador" was incorrectly classified as "nacional" because
+# "governo" alone tripped has_brazil. is_relevant() still uses the
+# original _BRAZIL_TOKENS unchanged (that filter's calibration is a
+# separate concern); this stricter set is only for geo_scope's binary
+# "is this genuinely about Brazil" question.
+_BRAZIL_SPECIFIC_TOKENS = {
+    "brasil","brasileiro","brasileira","brasileiros","brasileiras",
+    "paulo","paulista","carioca","brasilia","mineiro","gaucho",
+    "baiano","cearense","pernambucano","fluminense","minas",
+    "lula","bolsonaro","tarcisio","haddad","moro","flavio","eduardo",
+    "gleisi","tebet","pacheco","lira","ciro","marina","damares",
+    "stf","stj","tcu","tse","pgr","mpf","ibge","ibama","funai","inpe",
+    "planalto",
+    "real","reais","brl","selic","ipca","ibovespa",
+    "pt","pl","mdb","psdb","psd","republicanos","solidariedade",
+    "feminicidio","femicidio",
+}
+
+def geo_scope(cluster):
+    """
+    v1.3: classify a cluster by WHERE the story is set, for message
+    grouping (closest to farthest from a São Paulo capital-based
+    journalist): local -> estadual -> nacional -> internacional.
+    Purely geographic — does not affect story_category() or any
+    editorial filtering in is_relevant().
+    """
+    text_low = normalize(" ".join(a.title + " " + a.description for a in cluster["articles"]))
+    tokens = cluster.get("tokens", set())
+
+    if any(place in text_low for place in _LOCAL_SP_PLACES):
+        return "local"
+    if any(place in text_low for place in _ESTADUAL_SP_PLACES):
+        return "estadual"
+    # v1.4: use the stricter Brazil-specific set here, not the full
+    # _BRAZIL_TOKENS (which includes generic words like "governo" that
+    # would misclassify e.g. an El Salvador government story).
+    has_brazil = bool(tokens & _BRAZIL_SPECIFIC_TOKENS)
+    if not has_brazil:
+        return "internacional"
+    return "nacional"
+
+
+_GEO_LABELS = {
+    "local":         ("📍", "LOCAL — São Paulo e Região Metropolitana"),
+    "estadual":      ("🗺️", "ESTADUAL — Interior e Litoral de São Paulo"),
+    "nacional":      ("🇧🇷", "NACIONAL — Brasil"),
+    "internacional": ("🌍", "INTERNACIONAL — Mundo"),
+}
+
 def is_relevant(article):
     """Return True if the article matches monitored topics and isn't in blocked categories."""
     title_low = normalize(article.title)
@@ -865,12 +1178,15 @@ def is_relevant(article):
     if blocked_hits >= 2 and keep_hits == 0:
         return False
 
-    # International stories must have a Brazilian angle
+    # International stories must have a Brazilian angle — UNLESS the
+    # source is one we exempt (investigative outlets + v1.3 international
+    # wire sources, whose whole purpose is non-Brazil content).
     if keep_hits == 0 and institutional_hits == 0 and not has_brazil \
-       and article.source not in {"Intercept","A Pública","Ag. Mural","Fiocruz"}:
+       and article.source not in _ALWAYS_RELEVANT_SOURCES:
         return False
 
-    if keep_hits <= 1 and institutional_hits == 0 and not has_brazil:
+    if keep_hits <= 1 and institutional_hits == 0 and not has_brazil \
+       and article.source not in _ALWAYS_RELEVANT_SOURCES:
         return False
 
     return True
@@ -1857,11 +2173,14 @@ def build_story_card(cluster, rank, date_str):
     return "\n".join(lines)
 
 
-def build_summary(clusters, all_articles, date_str, failed_sources):
+def build_summary(clusters, all_articles, date_str, failed_sources, geo_buckets=None):
     """
     Kovach Ch.9 (Proportion): "Journalism creates a map for citizens to navigate society.
     Its value depends on completeness and proportionality."
     Max 6 stories, max 2 per category, coverage gaps shown.
+    v1.3: also shows a per-geographic-scope breakdown when geo_buckets
+    is provided, since the fichas that follow are now organized that
+    way (closest to farthest) rather than by verification tier alone.
     """
     n_ok  = len(SOURCES) - len(failed_sources)
     n_arts = len(all_articles)
@@ -1884,8 +2203,14 @@ def build_summary(clusters, all_articles, date_str, failed_sources):
         f"📰 *MONITOR DE NOTÍCIAS — {date_str}*",
         f"🗞️ {n_ok}/{len(SOURCES)} fontes · {n_arts} pautas relevantes",
         f"🔒 {verificado} verificadas  📋 {relatado} relatadas  💡 {apurado} apuradas  📡 {aviso} avisos",
-        "━━━",
     ]
+    if geo_buckets:
+        counts = " ".join(
+            f"{_GEO_LABELS[k][0]} {len(geo_buckets[k])}"
+            for k in ["local", "estadual", "nacional", "internacional"]
+        )
+        lines.append(f"_Por escopo (perto → longe): {counts}_")
+    lines.append("━━━")
 
     for i, c in enumerate(top, 1):
         label, em, n, has_inv, has_grande = score_story(c)
@@ -2621,7 +2946,7 @@ def main():
     date_str = now.strftime("%d/%m/%Y")
     time_str = now.strftime("%H:%M")
     run_str  = f"{date_str} {time_str}"
-    print(f"=== Monitor de Notícias v1.2 - {run_str} BRT ===\n")
+    print(f"=== Monitor de Notícias v1.4 - {run_str} BRT ===\n")
 
     ledger = NewsLedger("news_ledger.csv")
     graph  = EntityGraph("news_graph")
@@ -2641,7 +2966,7 @@ def main():
     all_articles = []
     failed = []
     print("  Coletando fontes em paralelo...")
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    with ThreadPoolExecutor(max_workers=10) as pool:
         futures = {pool.submit(fetch_rss, src): src for src in SOURCES}
         for future in as_completed(futures):
             src  = futures[future]
@@ -2686,49 +3011,70 @@ def main():
     print(f"  Clusters multi-fonte: {len(multi_source)}")
     print(f"  Histórias exclusivas: {len(single_source)}")
 
-    # v1.1: selection-rate calibration signal. `recent` (from
+    # v1.3: selection-rate calibration signal. `recent` (from
     # cluster_articles) already excludes is_relevant()-rejected
     # articles, so we recompute the time-window-only set to get a real
     # before/after comparison, not a tautological one.
     time_filtered = [a for a in all_articles if a.is_recent(window_h)]
     log_selection_rate(len(time_filtered), len(recent))
 
-    # 3. Send summary
-    summary = build_summary(multi_source + single_source[:5], recent, run_str, failed)
+    # v1.3: bucket multi-source clusters by geographic scope, closest to
+    # farthest — purely locational grouping, independent of editorial
+    # category. Order within each bucket is preserved from clusters'
+    # existing sort (source-count / verification-tier descending).
+    geo_buckets = {"local": [], "estadual": [], "nacional": [], "internacional": []}
+    for c in multi_source:
+        geo_buckets[geo_scope(c)].append(c)
+
+    # 3. Send summary (now includes a per-scope breakdown)
+    summary = build_summary(multi_source + single_source[:5], recent, run_str, failed, geo_buckets)
     send_telegram(summary)
     time.sleep(1)
 
-    # 4. Send top trending story cards (most covered first)
-    print("\n  Enviando fichas...")
+    # 4. Send story cards grouped by geographic scope, closest to
+    # farthest: local -> estadual -> nacional -> internacional. Each
+    # bucket gets its own header message and its own cap, so no single
+    # region crowds out the others — this also mechanically increases
+    # total volume (up to ~27 cards vs. the previous flat cap of 12),
+    # directly in response to wanting more news surfaced per run.
+    print("\n  Enviando fichas por escopo geográfico...")
     sent = 0
-    for rank, cluster in enumerate(multi_source[:12], 1):
-        cat_emoji, cat_label = story_category(cluster)
-        vip_term = None
-        for a in cluster["articles"]:
-            vip_term = check_vip_watchlist(a.title + " " + a.description)
-            if vip_term: break
+    BUCKET_CAPS = {"local": 8, "estadual": 5, "nacional": 8, "internacional": 6}
+    for scope_key in ["local", "estadual", "nacional", "internacional"]:
+        bucket = geo_buckets[scope_key]
+        if not bucket:
+            continue
+        emoji, label = _GEO_LABELS[scope_key]
+        send_telegram(f"{emoji} *{label}*", silent=True)
+        time.sleep(0.3)
+        for rank, cluster in enumerate(bucket[:BUCKET_CAPS[scope_key]], 1):
+            cat_emoji, cat_label = story_category(cluster)
+            vip_term = None
+            for a in cluster["articles"]:
+                vip_term = check_vip_watchlist(a.title + " " + a.description)
+                if vip_term: break
 
-        card = build_story_card(cluster, rank, date_str)
+            card = build_story_card(cluster, rank, date_str)
 
-        # v1.1: cross-day recurrence check (Spangher et al. 2024 —
-        # recurrence is itself a newsworthiness signal)
-        recur = ledger.check_recurrence(cluster, date_str)
-        if recur:
-            nd, dates = recur
-            card += f"\n\n🔁 _Pauta em desenvolvimento — indícios de cobertura similar em {nd} dia(s) anteriores_"
+            # v1.1: cross-day recurrence check (Spangher et al. 2024 —
+            # recurrence is itself a newsworthiness signal)
+            recur = ledger.check_recurrence(cluster, date_str)
+            if recur:
+                nd, dates = recur
+                card += f"\n\n🔁 _Pauta em desenvolvimento — indícios de cobertura similar em {nd} dia(s) anteriores_"
 
-        for part in split_long(card):
-            send_telegram(part)
-        time.sleep(0.5)
-        sent += 1
+            for part in split_long(card):
+                send_telegram(part)
+            time.sleep(0.5)
+            sent += 1
 
-        # v1.1: log to ledger for future recurrence detection
-        ledger.log_hit(date_str, cluster, cat_label, vip_term=vip_term)
-        # v1.2: log to entity graph (person/org/VIP relationships + timeline)
-        _record_cluster_to_graph(graph, date_str, cluster)
+            # v1.1: log to ledger for future recurrence detection
+            ledger.log_hit(date_str, cluster, cat_label, vip_term=vip_term)
+            # v1.2: log to entity graph (person/org/VIP relationships + timeline)
+            _record_cluster_to_graph(graph, date_str, cluster)
 
     # VIP watchlist hits among single-source clusters also get logged
-    # and surfaced even though they won't appear in multi_source[:12]
+    # and surfaced even though they won't appear in the geo buckets above
     vip_single_hits = []
     for cluster in single_source:
         vip_term = None
