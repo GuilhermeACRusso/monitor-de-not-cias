@@ -70,7 +70,7 @@ PES-49b7f9768c,pessoa,Carbono Oculto,,,03/07/2026,03/07/2026,1
 PES-cfaa437626,pessoa,Victor Henrique,,,03/07/2026,08/07/2026,2
 PES-87d4288a69,pessoa,Oliveira Shimada,,,03/07/2026,08/07/2026,2
 PES-71a64d3355,pessoa,Primeiro Comando,,,03/07/2026,08/07/2026,15
-VIP-ad1517aafe,vip,PCC,,,03/07/2026,08/07/2026,31
+VIP-ad1517aafe,vip,PCC,,,03/07/2026,09/07/2026,32
 PES-a8245adfbe,pessoa,Azevedo Carvalho,,,03/07/2026,03/07/2026,2
 PES-c3318e5b0a,pessoa,Messod Azulay Neto,,,03/07/2026,03/07/2026,2
 PES-ba4134ac5e,pessoa,Ao Metrópoles,,,03/07/2026,03/07/2026,1
@@ -198,7 +198,7 @@ PES-1687173392,pessoa,Oliveira Rocha,,,06/07/2026,06/07/2026,1
 PES-ec5fafd025,pessoa,Renan Santos,,,06/07/2026,06/07/2026,1
 PES-9e279d8f3b,pessoa,Romeu Zema,,,06/07/2026,06/07/2026,1
 PES-9b45fb77d4,pessoa,Rondas Ostensivas Tobias,,,06/07/2026,06/07/2026,1
-PES-6f40e3f9ae,pessoa,Ronickson Pimentel,,,06/07/2026,06/07/2026,1
+PES-6f40e3f9ae,pessoa,Ronickson Pimentel,,,06/07/2026,09/07/2026,2
 PES-929a5b629e,pessoa,Campeonato Carioca,,,06/07/2026,06/07/2026,1
 PES-7f590d59ab,pessoa,Trevor Noah,,,06/07/2026,06/07/2026,1
 PES-59cd88a059,pessoa,Morgan Stanley,,,06/07/2026,06/07/2026,1
@@ -262,7 +262,7 @@ PES-ab32117f58,pessoa,Rewatch Macron,,,07/07/2026,07/07/2026,1
 PES-b41427f1c0,pessoa,Erika Kirk,,,07/07/2026,07/07/2026,1
 PES-f17f654a67,pessoa,Charlie Kirk,,,07/07/2026,07/07/2026,1
 PES-160a99fc96,pessoa,Le Pen,,,07/07/2026,08/07/2026,5
-PES-3c0ca6b731,pessoa,Marine Le Pen,,,07/07/2026,08/07/2026,5
+PES-3c0ca6b731,pessoa,Marine Le Pen,,,07/07/2026,09/07/2026,6
 PES-ec19380bbc,pessoa,José Mucio,,,07/07/2026,07/07/2026,1
 PES-ead44d81f7,pessoa,Elbridge Colby,,,07/07/2026,08/07/2026,5
 PES-1d00767c87,pessoa,Dark Horse Senador,,,07/07/2026,07/07/2026,1
@@ -330,7 +330,7 @@ PES-199bd6df74,pessoa,Nova York,,,07/07/2026,08/07/2026,4
 EMP-27bb7dfdbe,empresa,Correios,,,07/07/2026,08/07/2026,3
 PES-85423dafe7,pessoa,República Flávio Bolsonaro,,,07/07/2026,08/07/2026,3
 PES-4b1407ea93,pessoa,Governo Lula,,,07/07/2026,08/07/2026,2
-PES-ac968efa2c,pessoa,Hugo Motta,,,07/07/2026,07/07/2026,1
+PES-ac968efa2c,pessoa,Hugo Motta,,,07/07/2026,09/07/2026,2
 PES-1119a27c66,pessoa,Sistema Nacional,,,07/07/2026,07/07/2026,1
 PES-55c9cc21c6,pessoa,Empresa Brasileira,,,07/07/2026,07/07/2026,1
 PES-dcf663554b,pessoa,Banco Provincia,,,07/07/2026,07/07/2026,1
@@ -342,7 +342,7 @@ PES-b09134dc18,pessoa,Nicolás Petro,,,07/07/2026,07/07/2026,1
 PES-08c17cdc98,pessoa,Alejandro Carranza,,,07/07/2026,07/07/2026,1
 PES-5893f4ab23,pessoa,Petro Burgos,,,07/07/2026,07/07/2026,1
 PES-9c5598f9cd,pessoa,Cambio Radical,,,07/07/2026,07/07/2026,1
-PES-0dc4bf52a3,pessoa,Middle East,,,07/07/2026,08/07/2026,2
+PES-0dc4bf52a3,pessoa,Middle East,,,07/07/2026,09/07/2026,3
 PES-db9316a042,pessoa,Hormuz The United States,,,07/07/2026,07/07/2026,1
 PES-eb3cf0457d,pessoa,Bandar Abbas,,,07/07/2026,07/07/2026,1
 PES-a07fb56126,pessoa,Atlanta Stadium,,,07/07/2026,07/07/2026,1
@@ -456,3 +456,31 @@ PES-bb565f4194,pessoa,Zohran Mamdani,,,08/07/2026,08/07/2026,1
 PES-5152c3f8bc,pessoa,Adeniyi Adeyemi,,,08/07/2026,08/07/2026,1
 PES-650416187e,pessoa,Roberto Silva,,,08/07/2026,08/07/2026,1
 PES-13451359ca,pessoa,Campina Grande,,,08/07/2026,08/07/2026,1
+PES-827efb37d9,pessoa,Bob Dylan,,,09/07/2026,09/07/2026,1
+PES-6152c9bcb7,pessoa,Marcelo Rubens Paiva Marcelo Rubens,,,09/07/2026,09/07/2026,1
+PES-eb089899e7,pessoa,Oscar Ainda Estou Aqui,,,09/07/2026,09/07/2026,1
+PES-695b066bb9,pessoa,Rubens Paiva,,,09/07/2026,09/07/2026,1
+PES-f49bf1b5fc,pessoa,Marcelo Rubens Paiva,,,09/07/2026,09/07/2026,1
+PES-788fa7b074,pessoa,Um Homem Chamado Opinião,,,09/07/2026,09/07/2026,1
+PES-c7ef0a0e59,pessoa,Cobre Panamá La,,,09/07/2026,09/07/2026,1
+PES-b0784476b2,pessoa,Omar Torrijos,,,09/07/2026,09/07/2026,1
+PES-120df9880a,pessoa,La Pintada,,,09/07/2026,09/07/2026,1
+PES-d7b3b77c7a,pessoa,Rémy Heitz,,,09/07/2026,09/07/2026,1
+PES-df9f4d1c01,pessoa,Conselho Nacional,,,09/07/2026,09/07/2026,1
+PES-517fb5477e,pessoa,Política Energética,,,09/07/2026,09/07/2026,1
+PES-a5102c4a97,pessoa,Chiquinho Brazão,,,09/07/2026,09/07/2026,1
+PES-f4a0ea0bec,pessoa,Domingos Brazão,,,09/07/2026,09/07/2026,1
+PES-8328e4204e,pessoa,Jeff Machado,,,09/07/2026,09/07/2026,1
+PES-aca6f2e342,pessoa,Jeander Vinícius,,,09/07/2026,09/07/2026,1
+PES-f743203b8a,pessoa,Silva Braga,,,09/07/2026,09/07/2026,1
+PES-cd6eae9a14,pessoa,Morre Edward Boggiss,,,09/07/2026,09/07/2026,1
+PES-4c5e83d268,pessoa,Edward Boggiss,,,09/07/2026,09/07/2026,1
+PES-7f421749a0,pessoa,Sandy Junior,,,09/07/2026,09/07/2026,1
+PES-412fa30b88,pessoa,Bonnie Tyler,,,09/07/2026,09/07/2026,1
+PES-d98b66d2e7,pessoa,Total Eclipse,,,09/07/2026,09/07/2026,1
+PES-f2c4ec3857,pessoa,Morre Bonnie Tyler,,,09/07/2026,09/07/2026,1
+PES-f4efcf5e39,pessoa,Holding Out,,,09/07/2026,09/07/2026,1
+PES-916618aa41,pessoa,Iran Centcom,,,09/07/2026,09/07/2026,1
+PES-d07d16536d,pessoa,Nego Zum,,,09/07/2026,09/07/2026,1
+PES-f10da41084,pessoa,Jesus Dias,,,09/07/2026,09/07/2026,1
+PES-f98cb7dfe7,pessoa,São Caetano,,,09/07/2026,09/07/2026,1
