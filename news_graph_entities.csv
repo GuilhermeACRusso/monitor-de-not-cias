@@ -19,13 +19,13 @@ PES-a28f6e404e,pessoa,Irán El,,,03/07/2026,11/08/2026,4
 PES-0bd226f748,pessoa,Irán La,,,03/07/2026,03/07/2026,1
 PES-fd56c862bd,pessoa,Universidade Estadual,,,03/07/2026,02/09/2026,2
 PES-3002294391,pessoa,Keiko Fujimori,,,03/07/2026,28/07/2026,10
-PES-de3b79f4f0,pessoa,Luiz Inácio Lula,,,03/07/2026,04/09/2026,341
+PES-de3b79f4f0,pessoa,Luiz Inácio Lula,,,03/07/2026,04/09/2026,342
 PES-a82c10a4dd,pessoa,Roberto Sanchez,,,03/07/2026,28/07/2026,4
 PES-4d667614c4,pessoa,Perú Con,,,03/07/2026,03/07/2026,2
 PES-c8f2be1a3a,pessoa,Luiz In,,,03/07/2026,03/09/2026,8
 PES-4f9b54bf10,pessoa,Juizado Nacional Eleitoral,,,03/07/2026,03/07/2026,1
 EMP-733c5f78bc,empresa,Vivo/Telefônica,,,03/07/2026,04/09/2026,27
-PES-aa81818eb6,pessoa,Flávio Bolsonaro,,,03/07/2026,04/09/2026,338
+PES-aa81818eb6,pessoa,Flávio Bolsonaro,,,03/07/2026,04/09/2026,339
 PES-5851e83989,pessoa,Seminário Nacional,,,03/07/2026,03/07/2026,2
 PES-87ea5cb837,pessoa,Partido Liberal,,,03/07/2026,03/09/2026,24
 PES-f4c88ed081,pessoa,Michelle Bolsonaro,,,03/07/2026,02/09/2026,57
@@ -180,8 +180,8 @@ PES-b957e1720a,pessoa,Fernanda Bolsonaro,,,06/07/2026,06/07/2026,2
 PES-dbb4814461,pessoa,Paulo Gonet,,,06/07/2026,04/09/2026,11
 PES-46142d9855,pessoa,Casa Branca Após,,,06/07/2026,06/07/2026,2
 PES-660ab22952,pessoa,Fabio Luis Lula,,,06/07/2026,28/08/2026,35
-PES-51c9d967ab,pessoa,Instituto Nacional,,,06/07/2026,04/09/2026,19
-PES-d0edb43f9b,pessoa,Seguro Social,,,06/07/2026,04/09/2026,15
+PES-51c9d967ab,pessoa,Instituto Nacional,,,06/07/2026,04/09/2026,20
+PES-d0edb43f9b,pessoa,Seguro Social,,,06/07/2026,04/09/2026,16
 PES-726801b107,pessoa,Partido Democrata,,,06/07/2026,11/08/2026,2
 PES-3d75c2c3f0,pessoa,Tesouro Os,,,06/07/2026,06/07/2026,1
 PES-7b94b9782a,pessoa,Tesouro Direto,,,06/07/2026,31/08/2026,16
@@ -326,9 +326,9 @@ PES-1300d19c23,pessoa,Nova Lima,,,07/07/2026,04/09/2026,3
 EMP-6c572727b0,empresa,Claro,,,07/07/2026,05/08/2026,4
 PES-f5d350fc76,pessoa,Frente Parlamentar,,,07/07/2026,15/07/2026,2
 PES-7baea7e05e,pessoa,Paulo Pimenta,,,07/07/2026,24/08/2026,2
-PES-199bd6df74,pessoa,Nova York,,,07/07/2026,04/09/2026,28
+PES-199bd6df74,pessoa,Nova York,,,07/07/2026,04/09/2026,29
 EMP-27bb7dfdbe,empresa,Correios,,,07/07/2026,31/08/2026,12
-PES-85423dafe7,pessoa,República Flávio Bolsonaro,,,07/07/2026,01/09/2026,18
+PES-85423dafe7,pessoa,República Flávio Bolsonaro,,,07/07/2026,04/09/2026,19
 PES-4b1407ea93,pessoa,Governo Lula,,,07/07/2026,03/09/2026,58
 PES-ac968efa2c,pessoa,Hugo Motta,,,07/07/2026,27/08/2026,11
 PES-1119a27c66,pessoa,Sistema Nacional,,,07/07/2026,03/08/2026,2
@@ -351,7 +351,7 @@ PES-4c9f368a05,pessoa,World Cup An,,,07/07/2026,07/07/2026,1
 PES-ce788401cb,pessoa,Hossam Hassan,,,07/07/2026,07/07/2026,1
 PES-7ec93d221e,pessoa,Osasco Acidente,,,08/07/2026,08/07/2026,1
 PES-b483a17a23,pessoa,Rodovia Castello Branco,,,08/07/2026,08/07/2026,1
-PES-d05fa9248f,pessoa,Gilmar Mendes,,,08/07/2026,03/09/2026,7
+PES-d05fa9248f,pessoa,Gilmar Mendes,,,08/07/2026,04/09/2026,8
 PES-9c3c40ca29,pessoa,Pesquisa Meio,,,08/07/2026,05/08/2026,3
 PES-2d3ad834d5,pessoa,Meio Ideia,,,08/07/2026,05/08/2026,2
 PES-4e0cdda0ea,pessoa,Correios Segundo,,,08/07/2026,08/07/2026,1
@@ -406,7 +406,7 @@ PES-b56bfb990d,pessoa,Santos Representantes,,,08/07/2026,08/07/2026,1
 PES-c802d30ac5,pessoa,Tecon Santos,,,08/07/2026,08/07/2026,1
 PES-e1ade44df1,pessoa,Moraes Romeu Zema,,,08/07/2026,08/07/2026,2
 PES-9d401892d1,pessoa,Presidência Romeu Zema,,,08/07/2026,29/07/2026,5
-PES-2abde6c73e,pessoa,Edson Fachin,,,08/07/2026,04/09/2026,19
+PES-2abde6c73e,pessoa,Edson Fachin,,,08/07/2026,04/09/2026,20
 PES-58c34048df,pessoa,Oriente Médio Na Bolsa,,,08/07/2026,08/07/2026,1
 PES-b217b7b253,pessoa,Kuwait The,,,08/07/2026,08/07/2026,1
 PES-0b4f540a95,pessoa,Helder Salomão,,,08/07/2026,08/07/2026,1
@@ -428,7 +428,7 @@ PES-81d1e36162,pessoa,Financial Times,,,08/07/2026,29/07/2026,2
 PES-6d5b825bb0,pessoa,Procuradoria Regional Eleitoral,,,08/07/2026,31/08/2026,5
 PES-8d24502a1a,pessoa,Camilo Santana,,,08/07/2026,08/07/2026,2
 PES-62251b5a3c,pessoa,Teresa Leitão,,,08/07/2026,08/07/2026,1
-PES-a05950dc9d,pessoa,Davi Alcolumbre,,,08/07/2026,04/09/2026,42
+PES-a05950dc9d,pessoa,Davi Alcolumbre,,,08/07/2026,04/09/2026,43
 PES-0982907324,pessoa,Sidônio Palmeira,,,08/07/2026,08/07/2026,1
 PES-128d7a1ddf,pessoa,Senado Marina Silva,,,08/07/2026,08/07/2026,1
 PES-95128202e4,pessoa,Ribeirão Preto,,,08/07/2026,25/08/2026,11
@@ -437,7 +437,7 @@ PES-a1b19453f6,pessoa,Bia Haddad,,,08/07/2026,08/07/2026,1
 PES-bb6a3252b8,pessoa,Alex Daoud,,,08/07/2026,08/07/2026,1
 PES-3504e2f254,pessoa,Câmara Municipal,,,08/07/2026,04/09/2026,7
 PES-99dd42a9d5,pessoa,Ribeirão Preto Primeiro,,,08/07/2026,08/07/2026,1
-PES-43801d33c5,pessoa,Rogério Marinho,,,08/07/2026,03/09/2026,15
+PES-43801d33c5,pessoa,Rogério Marinho,,,08/07/2026,04/09/2026,16
 PES-a375169717,pessoa,Sergey Vladimirovich Cherkasov,,,08/07/2026,08/07/2026,1
 PES-f1ef4fb3f7,pessoa,Sergei Vladimirovitch Tcherkasov,,,08/07/2026,08/07/2026,1
 PES-2c4e94605f,pessoa,Diário Oficial,,,08/07/2026,03/09/2026,21
@@ -587,7 +587,7 @@ PES-e357a1693e,pessoa,Sóstenes Cavalcante,,,10/07/2026,10/07/2026,2
 PES-c195b66e3e,pessoa,Luiz Carlos Motta,,,10/07/2026,10/07/2026,2
 PES-43056d087f,pessoa,Capitão Alden,,,10/07/2026,10/07/2026,2
 PES-b6c15e747a,pessoa,Costa Neto,,,10/07/2026,26/08/2026,5
-PES-c59e51df66,pessoa,Banco Master,,,10/07/2026,04/09/2026,57
+PES-c59e51df66,pessoa,Banco Master,,,10/07/2026,04/09/2026,58
 PES-68028c12ea,pessoa,Ciro Gomes,,,10/07/2026,04/09/2026,15
 PES-944679a1a4,pessoa,Elayne Christina,,,10/07/2026,10/07/2026,1
 PES-2743561ed6,pessoa,Patrus Ananias,,,10/07/2026,29/08/2026,11
@@ -715,7 +715,7 @@ PES-901eba3182,pessoa,Milky Way,,,13/07/2026,13/07/2026,1
 PES-06c33f5b1b,pessoa,Haia Secretário,,,13/07/2026,13/07/2026,1
 PES-5fdc5e958a,pessoa,Marco Rubio,,,13/07/2026,07/08/2026,12
 PES-a6616a8c5b,pessoa,Avenida Sapopemba,,,13/07/2026,14/07/2026,2
-PES-356e6769ea,pessoa,Defesa Civil,,,13/07/2026,04/09/2026,14
+PES-356e6769ea,pessoa,Defesa Civil,,,13/07/2026,04/09/2026,15
 EMP-30e60bd401,empresa,Sabesp,,,13/07/2026,01/09/2026,7
 PES-d9434fb185,pessoa,Presidência Social,,,13/07/2026,13/07/2026,1
 PES-e379637868,pessoa,Flávio Bolsonaro Renan Santos,,,13/07/2026,14/07/2026,2
@@ -1582,7 +1582,7 @@ PES-4bf0b87dd8,pessoa,Silva Monteiro,,,27/07/2026,27/07/2026,2
 PES-bc35d01f5d,pessoa,Engenharia Civil,,,27/07/2026,27/07/2026,2
 PES-0e1b46505b,pessoa,Lula Brazilian,,,27/07/2026,28/07/2026,2
 PES-d7dfcfbb80,pessoa,President Javier Milei,,,27/07/2026,04/09/2026,3
-PES-0d1482c7ba,pessoa,Partido Novo,,,27/07/2026,27/07/2026,2
+PES-0d1482c7ba,pessoa,Partido Novo,,,27/07/2026,04/09/2026,3
 PES-ff80db92ba,pessoa,Minas Gerais Romeu Zema,,,27/07/2026,11/08/2026,3
 PES-ce44b27eb1,pessoa,Ronnie Wood,,,27/07/2026,27/07/2026,1
 PES-9eba40afc1,pessoa,Rolling Stones,,,27/07/2026,27/07/2026,1
@@ -1656,7 +1656,7 @@ PES-aef1113926,pessoa,Cleitinho Azevedo,,,28/07/2026,25/08/2026,14
 PES-44d6c918d7,pessoa,Big Data,,,28/07/2026,28/07/2026,1
 PES-2148334f0b,pessoa,Para Marcos Troyjo,,,28/07/2026,28/07/2026,1
 PES-afe94341d8,pessoa,Novo Banco,,,28/07/2026,28/07/2026,1
-PES-add05c0149,pessoa,Igreja Presbiteriana,,,28/07/2026,04/09/2026,2
+PES-add05c0149,pessoa,Igreja Presbiteriana,,,28/07/2026,04/09/2026,3
 PES-a2ed40b817,pessoa,Peru Keiko Fujimori,,,28/07/2026,28/07/2026,1
 PES-37e36ade66,pessoa,Why Netanyahu,,,28/07/2026,29/07/2026,3
 PES-d0bbf72a45,pessoa,Caspian Sea,,,28/07/2026,28/07/2026,1
@@ -1989,7 +1989,7 @@ PES-4a6576484d,pessoa,Ceuta In,,,31/07/2026,31/07/2026,2
 PES-5b3e1977d7,pessoa,Ceuta Nine,,,31/07/2026,31/07/2026,1
 PES-17c6b87a07,pessoa,Morocco Around,,,31/07/2026,31/07/2026,1
 PES-4918396164,pessoa,Asian Football Confederation,,,31/07/2026,31/07/2026,1
-PES-460491fc52,pessoa,North America,,,31/07/2026,04/09/2026,2
+PES-460491fc52,pessoa,North America,,,31/07/2026,04/09/2026,3
 PES-d242820934,pessoa,Yung Filly,,,31/07/2026,31/07/2026,1
 PES-15a3f27820,pessoa,Massive Attack,,,31/07/2026,03/08/2026,4
 PES-11b214481e,pessoa,Six Fijians,,,31/07/2026,31/07/2026,1
@@ -2970,7 +2970,7 @@ PES-5b5a369ecd,pessoa,Down Homem,,,14/08/2026,14/08/2026,1
 PES-c0604ab91e,pessoa,Engenheiro Luís Carlos Berrini,,,14/08/2026,14/08/2026,1
 PES-36f914b4d4,pessoa,Presidência Renan Santos,,,14/08/2026,25/08/2026,2
 PES-c1cee60322,pessoa,Tarcísio Fernando Haddad,,,14/08/2026,14/08/2026,1
-PES-ea92dcfd6d,pessoa,Margem Equatorial,,,14/08/2026,04/09/2026,7
+PES-ea92dcfd6d,pessoa,Margem Equatorial,,,14/08/2026,04/09/2026,8
 PES-079f01d0c8,pessoa,Sports Fund,,,14/08/2026,14/08/2026,1
 PES-0285bd2dd9,pessoa,Nine Moldovans,,,14/08/2026,14/08/2026,1
 PES-0b85096446,pessoa,August Renoir,,,14/08/2026,14/08/2026,1
@@ -3911,7 +3911,7 @@ PES-89c66339c4,pessoa,Claudio Luiz Lottenberg,,,01/09/2026,01/09/2026,2
 PES-e325865c39,pessoa,Sociedade Beneficente Israelita Brasileira Albert,,,01/09/2026,01/09/2026,2
 PES-7e8e8b8669,pessoa,Erika Hilton,,,01/09/2026,01/09/2026,1
 PES-743706dfb8,pessoa,Geral Eleitoral,,,01/09/2026,01/09/2026,1
-PES-d15220b4ab,pessoa,Lindsay Clancy,,,01/09/2026,04/09/2026,4
+PES-d15220b4ab,pessoa,Lindsay Clancy,,,01/09/2026,04/09/2026,5
 PES-71eb083fbe,pessoa,The Massachusetts,,,01/09/2026,01/09/2026,2
 PES-3b7abaa112,pessoa,William Sullivan,,,01/09/2026,01/09/2026,1
 PES-66568a5fd9,pessoa,The Scientist Trying,,,01/09/2026,01/09/2026,1
@@ -4157,8 +4157,8 @@ PES-87d63cb049,pessoa,Kyiv During,,,04/09/2026,04/09/2026,1
 PES-d69b5f8a6d,pessoa,Luiz Edson Fachin,,,04/09/2026,04/09/2026,1
 PES-d8648bfa41,pessoa,No El,,,04/09/2026,04/09/2026,1
 PES-bd426fd133,pessoa,Islas Malvinas El Presidente,,,04/09/2026,04/09/2026,1
-PES-a51388c9cc,pessoa,The Togo,,,04/09/2026,04/09/2026,2
-PES-665ce581f9,pessoa,The United Nations,,,04/09/2026,04/09/2026,2
+PES-a51388c9cc,pessoa,The Togo,,,04/09/2026,04/09/2026,3
+PES-665ce581f9,pessoa,The United Nations,,,04/09/2026,04/09/2026,3
 PES-9298a9e8a1,pessoa,Alencar Santana,,,04/09/2026,04/09/2026,1
 PES-b58ffae129,pessoa,Teatro Adamastor,,,04/09/2026,04/09/2026,1
 PES-16b6f27263,pessoa,Sexualmente Transmissíveis,,,04/09/2026,04/09/2026,1
@@ -4166,8 +4166,8 @@ PES-e57d614067,pessoa,Hepatites Virais,,,04/09/2026,04/09/2026,1
 PES-bf653cca29,pessoa,Lucas Ribeiro,,,04/09/2026,04/09/2026,1
 PES-b05310717b,pessoa,Já Efraim Filho,,,04/09/2026,04/09/2026,1
 PES-b7f8b51f84,pessoa,Cícero Lucena,,,04/09/2026,04/09/2026,1
-PES-bcbe0dcfce,pessoa,Assembleia Geral,,,04/09/2026,04/09/2026,1
-PES-bc8eed19ba,pessoa,Equal Earth,,,04/09/2026,04/09/2026,1
+PES-bcbe0dcfce,pessoa,Assembleia Geral,,,04/09/2026,04/09/2026,2
+PES-bc8eed19ba,pessoa,Equal Earth,,,04/09/2026,04/09/2026,2
 PES-6a0bb9b316,pessoa,Ativa Investimentos,,,04/09/2026,04/09/2026,1
 PES-f1793e166f,pessoa,De Câmbio Negro,,,04/09/2026,04/09/2026,1
 PES-e2e677569a,pessoa,Setor Comercial Sul,,,04/09/2026,04/09/2026,1
@@ -4178,12 +4178,14 @@ PES-9b82344aab,pessoa,Hércules Em,,,04/09/2026,04/09/2026,1
 PES-586bceb896,pessoa,Rádio Progresso,,,04/09/2026,04/09/2026,1
 PES-76a1968271,pessoa,Duda Salabert,,,04/09/2026,04/09/2026,1
 PES-e279948f7d,pessoa,Felipe Gomes,,,04/09/2026,04/09/2026,1
-PES-7e5c54cc00,pessoa,General Assembly,,,04/09/2026,04/09/2026,1
-PES-c711be1a68,pessoa,Gerardus Mercator,,,04/09/2026,04/09/2026,1
-PES-14538bf31f,pessoa,Andrew Tate,,,04/09/2026,04/09/2026,1
-PES-c84c92e6a7,pessoa,Tristan Tate,,,04/09/2026,04/09/2026,1
-PES-fa7b420d4e,pessoa,Com Ato Institucional Xandônico,,,04/09/2026,04/09/2026,1
+PES-7e5c54cc00,pessoa,General Assembly,,,04/09/2026,04/09/2026,2
+PES-c711be1a68,pessoa,Gerardus Mercator,,,04/09/2026,04/09/2026,2
+PES-14538bf31f,pessoa,Andrew Tate,,,04/09/2026,04/09/2026,2
+PES-c84c92e6a7,pessoa,Tristan Tate,,,04/09/2026,04/09/2026,2
+PES-fa7b420d4e,pessoa,Com Ato Institucional Xandônico,,,04/09/2026,04/09/2026,2
 PES-e2fad058e0,pessoa,Comando Norte,,,04/09/2026,04/09/2026,1
 PES-684d20aa8b,pessoa,Farath Coronel,,,04/09/2026,04/09/2026,1
 PES-c046c67e5b,pessoa,Camilo Séptimo,,,04/09/2026,04/09/2026,1
 PES-38abcf4be2,pessoa,Jonathan Meléndez,,,04/09/2026,04/09/2026,1
+PES-893c0a8c3f,pessoa,Supremo Alexandre,,,04/09/2026,04/09/2026,1
+PES-3d8f7eaf92,pessoa,Minas Gerais Frente,,,04/09/2026,04/09/2026,1
